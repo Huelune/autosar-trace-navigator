@@ -11,7 +11,8 @@
 - storage: 분석 결과와 탐색 세션의 영속화. 원본 C 소스와 분리.
 - rte: RTE 헤더와 명시적 Read/Write 접근을 분석하여 이름 기반 데이터 연결 후보 기록.
 - trace: 최초 목표 분기, 탐색 단계, 조사 이유 관리.
-- gui(후속): Tkinter 화면. 분석 계층을 호출하며 파싱 로직을 포함하지 않음.
+- workbench: 일관된 소스 바이트 스냅샷, 화면 상태와 조사·저장 액션.
+- gui: Tkinter 화면. 워커 분석과 메인 스레드 위젯 갱신을 분리하며 파싱 로직을 포함하지 않음.
 
 FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDataDependency는
 포트/데이터 요소 및 읽기·쓰기 관계를 기록한다. Rte_Read처럼 호출 구문인 경우에도
@@ -30,7 +31,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 4. 스캐너·파서 범위의 통합 검증(완료).
 5. 사용자 승인에 따른 Trace Manager·SQLite 세션 저장 및 복원(완료).
 6. 이름 기반 RTE Resolver와 Trace/SQLite 통합 검증(완료).
-7. GUI는 후속 범위.
+7. Tkinter GUI와 실제 위젯·클릭 검증(완료).
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
@@ -41,5 +42,6 @@ storage.py는 그 불변 세션 스냅샷을 SQLite 트랜잭션으로 저장·�
 함수 호출 조사와 RTE 조사 이동은 별도 relation으로 기록하며 실제 연결은 해석하지 않는다.
 SQLite 세션 스키마는 분석 인덱스 저장과 분리한다. rte.py는 호출과 분리된
 Read/Write 접근 및 이름 기반 연결 후보를 제공한다. 실제 ARXML wiring과 매크로 확장,
-실행 순서는 해석하지 않으며 GUI는 후속 설계다.
+실행 순서는 해석하지 않는다. workbench.py와 gui.py가 위 API를 조합해 목표·조사 경로·이유를
+보존하는 로컬 화면을 제공한다. 원본 소스는 변경하지 않는다.
 상세 계약은 [파서 문서](parser.md), [RTE 문서](rte.md)를 참고한다.
