@@ -47,18 +47,40 @@ def _validate_range(span: SourceRange) -> None:
         raise ValueError("Invalid source range")
 
 
+def _validate_function(function: FunctionDefinition) -> None:
+    _require_text(function.id)
+    _require_text(function.name)
+    _validate_range(function.location)
+    _validate_range(function.body_location)
+    if (function.location.path != function.body_location.path
+            or not function.location.start_byte <= function.body_location.start_byte
+            <= function.body_location.end_byte <= function.location.end_byte):
+        raise ValueError("Function body must belong to its source definition")
+
+
 def validate_session(session: TraceSession) -> None:
     """Reject broken history references, including loaded/caller-created snapshots."""
     _require_text(session.id)
+    _require_text(session.target_branch.id)
+    _validate_function(session.target_function)
     if not session.steps or session.target_branch.function_id != session.target_function.id:
         raise ValueError("A session needs a target branch belonging to its target function")
     if session.target_branch.kind not in {"if", "else_if", "else"}:
         raise ValueError("Invalid target branch kind")
+    if ((session.target_branch.kind == "else" and session.target_branch.condition is not None)
+            or (session.target_branch.kind != "else" and not session.target_branch.condition)):
+        raise ValueError("Invalid target condition")
     if session.target_branch.location.path != session.target_function.location.path:
         raise ValueError("Target function and branch must use the same source file")
     for span in (session.target_function.location, session.target_function.body_location,
                  session.target_branch.location, session.target_branch.body_location):
         _validate_range(span)
+    branch = session.target_branch
+    body = session.target_function.body_location
+    if (branch.body_location.path != branch.location.path
+            or not body.start_byte <= branch.location.start_byte <= branch.body_location.start_byte
+            <= branch.body_location.end_byte <= branch.location.end_byte <= body.end_byte):
+        raise ValueError("Target branch must lie within its function body")
     seen: set[str] = set()
     for index, step in enumerate(session.steps):
         for value in (step.id, step.function.id, step.function.name, step.reason):
@@ -73,8 +95,7 @@ def validate_session(session: TraceSession) -> None:
             raise ValueError("Steps must refer to an earlier parent")
         if step.relation in {"call", "rte_data"} and step.evidence is None:
             raise ValueError("Call/RTE investigation steps require an evidence location")
-        _validate_range(step.function.location)
-        _validate_range(step.function.body_location)
+        _validate_function(step.function)
         if step.evidence is not None:
             _validate_range(step.evidence)
         seen.add(step.id)

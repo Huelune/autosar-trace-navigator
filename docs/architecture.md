@@ -27,11 +27,16 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 1. 패키지 구조, 환경, 작업 지침과 환경 검증 테스트(완료).
 2. 읽기 전용 스캐너와 가상 AUTOSAR fixture, 스캐너 테스트(완료).
 3. 함수/호출/분기 파서, 위치 및 불확실성 모델과 테스트(완료).
-4. 위 범위의 통합 검증(완료). Trace Manager, RTE Resolver, GUI와 DB 스키마 구현은 후속 범위.
+4. 스캐너·파서 범위의 통합 검증(완료).
+5. 사용자 승인에 따른 Trace Manager·SQLite 세션 저장 및 복원(완료).
+6. RTE Resolver와 GUI는 후속 범위.
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
 models.py는 함수 정의, 호출 구문, 분기, 위치, 진단의 불변 모델을 정의한다.
 파서가 함수/호출/분기의 위치와 불확실성을 기록하며 실제 호출 대상 연결과 RTE
-데이터 의미 해석은 수행하지 않는다. 나머지 storage/rte/trace/gui는 후속 설계다.
+데이터 의미 해석은 수행하지 않는다. trace.py는 최초 목표 및 조사 경로를 보존하고,
+storage.py는 그 불변 세션 스냅샷을 SQLite 트랜잭션으로 저장·복원한다.
+함수 호출 조사와 RTE 조사 이동은 별도 relation으로 기록하며 실제 연결은 해석하지 않는다.
+SQLite 세션 스키마는 분석 인덱스 저장과 분리한다. rte/gui는 후속 설계다.
 상세 계약은 [파서 문서](parser.md)를 참고한다.

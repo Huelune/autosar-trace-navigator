@@ -33,3 +33,36 @@ manager.back()
   호출부에서 전달한 불확실성도 유지한다.
 - 스냅샷은 함수·분기 메타데이터와 위치이며 원본 전체 코드를 복사하지 않는다.
   파일 수정 후 위치가 유효한지 자동으로 확인하거나 재연결하지 않는다.
+
+## SQLite 저장·복원
+
+위 예제의 manager를 명시적으로 저장한다. 시작·이동 시 자동 저장은 하지 않는다.
+
+```python
+from autosar_trace_navigator.storage import TraceStore
+
+with TraceStore("investigation.sqlite3") as store:
+    revision = store.save(manager.session)  # 새 세션, revision=1
+    session_id = manager.session.id
+
+with TraceStore("investigation.sqlite3") as store:
+    saved = store.load(session_id)
+    manager = TraceManager(saved.session)
+    # 현재 위치 변경 또는 조사 단계를 추가한 후:
+    revision = store.save(manager.session, expected_revision=saved.revision)
+    print(store.list_sessions())
+```
+
+- `.sqlite3`, `.db` 또는 `:memory:`를 받는다. 부모 폴더는 미리 만들어야 한다.
+- DB는 application_id와 schema version으로 식별한다. 세션 ID·리비전·JSON
+  스냅샷을 한 행에 저장하며 C/H 본문이나 전체 파싱 인덱스는 저장하지 않는다.
+- 목표, 버려진 대안 경로, 현재 커서, 소스 위치, 조사 이유, 불확실성을 복원한다.
+  복원은 원본 파일을 다시 열지 않는다. 실제 코드 변경 여부는 별도로 확인해야 한다.
+- `save(session)`은 새 세션만 삽입한다. 갱신은 `expected_revision`이 필요하며,
+  다른 저장자가 먼저 갱신했거나 세션이 없으면 TraceConflictError가 발생한다.
+  충돌 시 자동 덮어쓰기·재시도는 하지 않는다. 최신 내용을 불러와 조사자가 병합한다.
+- 저장은 트랜잭션으로 수행한다. 실패 시 이전 행과 다른 세션은 보존된다.
+- 미지원 버전이나 다른 DB는 초기화·마이그레이션하지 않는다. 손상된 스냅샷은
+  ValueError, 없는 세션은 KeyError, SQLite 입출력 오류는 SQLite 예외로 전달한다.
+- `with`를 쓰거나 `close()`로 연결을 닫는다. import만으로 DB를 생성하지 않는다.
+- 근거 위치는 사용자가 지정한 조사 근거이며 자동 심볼/RTE 해석을 의미하지 않는다.

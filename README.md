@@ -4,13 +4,14 @@ AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보�
 현재 **STEP 1: 프로젝트 구조 및 Python 환경**과 사용자 요청에 따른
 [6단계 추적용 가상 AUTOSAR 샘플](test/README.md)을 구현했습니다.
 읽기 전용 C/H 파일 스캐너와 함수 정의·호출·분기 구문 파서를 구현했습니다.
-SQLite 저장 기능 및 GUI는 아직 구현하지 않았습니다.
+목표 분기·조사 경로를 보존하는 Trace Manager와 SQLite 세션 저장을 구현했습니다.
+GUI와 RTE Resolver는 아직 구현하지 않았습니다.
 
 ## 구조
 
 ```text
-src/autosar_trace_navigator/  scanner.py, parser.py, models.py
-tests/                       환경·스캐너·파서·샘플·C 실행 검증 테스트
+src/autosar_trace_navigator/  스캐너·파서·모델·Trace Manager·SQLite 저장
+tests/                       환경·분석·탐색 상태·저장·C 실행 검증 테스트
 test/                        가상 AUTOSAR C/H 및 C 실행 하네스
 docs/architecture.md         계층 설계와 후속 단계
 AGENTS.md                    개발 및 테스트 규칙
@@ -63,8 +64,9 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 34개와
-C 시나리오 12개 통과. Trace Manager, RTE Resolver, SQLite 저장 및 GUI는 후속 범위입니다.
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 47개와
+C 시나리오 12개 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+RTE Resolver와 GUI는 후속 범위입니다.
 
 ## 오프라인 환경 구성
 
