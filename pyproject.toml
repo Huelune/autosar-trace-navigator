@@ -1,0 +1,17 @@
+[build-system]
+requires = ["setuptools>=77,<81"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "autosar-trace-navigator"
+version = "0.1.0"
+description = "Local AUTOSAR Classic C integration-test trace analysis"
+readme = "README.md"
+requires-python = ">=3.11,<3.15"
+dependencies = [
+    "tree-sitter==0.25.2",
+    "tree-sitter-c==0.24.1",
+]
+
+[tool.setuptools.packages.find]
+where = ["src"]
