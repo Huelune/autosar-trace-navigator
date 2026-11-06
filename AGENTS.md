@@ -4,7 +4,7 @@
 - AUTOSAR Classic C 통합 테스트의 목표 분기, 탐색 경로, 현재 함수 조사 이유를 보존하는 로컬 도구를 개발한다.
 - Python, Tkinter, SQLite, tree-sitter-c를 사용한다. 실행 중 인터넷에 의존하지 않는다.
 - 실제 고객사 소스는 반입하지 않는다. 테스트에는 직접 작성한 가상 C 코드만 사용한다.
-- 스캐너·파서·Trace Manager·SQLite 다음 단계로 RTE 접근 및 공급·소비 후보 Resolver를 구현한다. GUI는 별도 요청 전 구현하지 않는다.
+- 사용자 승인에 따라 기존 분석·Trace·SQLite 기능을 Tkinter GUI로 연결한다. 분석 로직은 Tkinter에 의존하지 않고 화면 상태 계층으로 분리한다.
 - RTE 이름 기반 후보는 실제 연결로 확정하지 않는다. 매크로, 헤더 범위, ARXML·실행 순서 미해석을 명시한다.
 - test/parser_cases/는 의도적인 오류·미확장 매크로 사례를 포함하므로 실행용 AUTOSAR 샘플과 분리한다.
 
