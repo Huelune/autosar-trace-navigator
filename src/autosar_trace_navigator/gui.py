@@ -68,6 +68,7 @@ class Navigator(ttk.Frame):
         self.reanalyzed = False
         self.poll_id: str | None = None
         self.source_focus_id: str | None = None
+        self.history_focus_id: str | None = None
         self.page_offset = 0
         self.last_query = ""
         self.picked_location: SourceRange | None = None
@@ -465,6 +466,11 @@ class Navigator(ttk.Frame):
         note = " [이전 조사 스냅샷 — 소스 변경 여부 미검증]" if self.workbench.restored or self.reanalyzed else ""
         probe = manager.current_step.probe
         value_context = f" | 현재 값 조사: {probe.expression} ({probe.kind})" if probe else ""
+        if probe is None and "ct_accessibility_not_verified" in manager.current_step.uncertainty:
+            value_context = " | CT 전역 후보에서 값 추적 중지"
+            _set_text(self.detail, "CT 전역 제어 후보에 도달해 값 출처 추적을 멈췄습니다.\n"
+                      "실제 CT 접근성과 설정할 값은 확인이 필요합니다.\n"
+                      "필요한 실행 조건은 실행 조건 탭에서 조사할 수 있습니다.")
         self.context.set(f"현재: {manager.current_step.function.name} | 조사 이유: {manager.current_step.reason}{note}\n"
                          + "경로: " + " → ".join(step.function.name for step in manager.current_path) + value_context)
         requirements = [reason.split(": ", 1)[1] + (" → 참 필요" if reason.startswith("execution_requirement_true:") else " → 거짓 필요")
@@ -507,6 +513,16 @@ class Navigator(ttk.Frame):
             self.browse_function()
         self.show_source(manager.current_step.selected_location or current.location)
         self.source_notebook.select(0)
+        if self.history_focus_id is not None:
+            self.root.after_cancel(self.history_focus_id)
+        step_id = manager.session.current_step_id
+
+        def focus_history_after_layout() -> None:
+            self.history_focus_id = None
+            if (not self.closed and self.workbench.manager is manager
+                    and manager.session.current_step_id == step_id):
+                self.history.see(step_id)
+        self.history_focus_id = self.root.after_idle(focus_history_after_layout)
 
     def preview_candidate(self, table: ttk.Treeview) -> None:
         selected = table.selection()
@@ -638,6 +654,9 @@ class Navigator(ttk.Frame):
             if self.source_focus_id is not None:
                 self.root.after_cancel(self.source_focus_id)
                 self.source_focus_id = None
+            if self.history_focus_id is not None:
+                self.root.after_cancel(self.history_focus_id)
+                self.history_focus_id = None
             self.executor.shutdown(wait=False, cancel_futures=True)
             self.root.destroy()
 

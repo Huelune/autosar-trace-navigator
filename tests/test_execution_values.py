@@ -179,6 +179,55 @@ class ExecutionGuiTests(unittest.TestCase):
         self.assertTrue(button.winfo_ismapped())
         self.assertLessEqual(button.winfo_rooty() + button.winfo_height(), self.root.winfo_rooty() + self.root.winfo_height())
 
+    def test_ct_boundary_explains_stop_and_restores_without_source_analysis(self):
+        workbench = self.app.workbench
+        follow_kind(workbench, "rte_data")
+        follow_kind(workbench, "expression_operand", "ValuePath_RawInput")
+        follow_kind(workbench, "ct_global_input")
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
+            database = Path(directory) / "boundary.sqlite3"
+            workbench.save(database)
+            restored = Workbench()
+            restored.restore(database, workbench.session.id)
+            self.app.workbench = restored
+            self.app.refresh_trace()
+            self.assertIn("CT 전역 후보에서 값 추적 중지", self.app.context.get())
+            self.assertIn("실제 CT 접근성", self.app.detail.get("1.0", "end"))
+            self.assertFalse(self.app.values.get_children())
+            self.assertFalse(restored.dirty)
+            self.assertIn("pedal → 60", self.app.goal.get())
+
+    def test_long_alternative_history_keeps_current_row_visible_after_restore_and_back(self):
+        workbench = self.app.workbench
+        follow_kind(workbench, "rte_data")
+        follow_kind(workbench, "expression_operand", "ValuePath_RawInput")
+        parent = workbench.manager.current_step.id
+        for index in range(18):
+            workbench.select(parent)
+            candidate = next(c for c in workbench.execution_candidates()
+                             if c.probe and c.probe.expression == "ValuePath_ModeInput")
+            workbench.follow(candidate, f"조건 조사 대안 {index}")
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
+            database = Path(directory) / "tree.sqlite3"
+            workbench.save(database)
+            workbench.restore(database, workbench.session.id)
+            self.root.geometry("1100x760")
+            self.root.deiconify()
+            self.app.refresh_trace()
+            self.root.update()
+            current = workbench.session.current_step_id
+            self.assertTrue(self.app.history.bbox(current))
+            before = workbench.session
+            self.app.history.selection_set(parent)
+            self.app.preview_history()
+            self.root.update()
+            self.assertEqual(workbench.session, before)
+            self.assertFalse(workbench.dirty)
+            self.app.back()
+            self.root.update()
+            self.assertEqual(workbench.session.current_step_id, parent)
+            self.assertTrue(self.app.history.bbox(parent))
+
 
 if __name__ == "__main__":
     unittest.main()
