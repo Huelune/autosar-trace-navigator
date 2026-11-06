@@ -66,3 +66,13 @@ class ParseResult:
     calls: tuple[FunctionCall, ...]
     branches: tuple[Branch, ...]
     diagnostics: tuple[ParseDiagnostic, ...]
+
+
+@dataclass(frozen=True)
+class ValueProbe:
+    """A value to investigate at a source use site, not a solved constraint."""
+
+    function_id: str
+    expression: str
+    location: SourceRange
+    kind: Literal["variable", "return"] = "variable"
