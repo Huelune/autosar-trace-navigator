@@ -63,6 +63,9 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 34개와
+C 시나리오 12개 통과. Trace Manager, RTE Resolver, SQLite 저장 및 GUI는 후속 범위입니다.
+
 ## 오프라인 환경 구성
 
 인터넷 연결이 가능한 동일 OS/아키텍처/Python 버전의 준비 환경에서:

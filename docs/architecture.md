@@ -27,7 +27,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 1. 패키지 구조, 환경, 작업 지침과 환경 검증 테스트(완료).
 2. 읽기 전용 스캐너와 가상 AUTOSAR fixture, 스캐너 테스트(완료).
 3. 함수/호출/분기 파서, 위치 및 불확실성 모델과 테스트(완료).
-4. 위 범위의 통합 검증. Trace Manager, RTE Resolver, GUI와 DB 스키마 구현은 후속 범위.
+4. 위 범위의 통합 검증(완료). Trace Manager, RTE Resolver, GUI와 DB 스키마 구현은 후속 범위.
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
