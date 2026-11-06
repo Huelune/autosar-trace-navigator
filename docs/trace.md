@@ -66,3 +66,13 @@ with TraceStore("investigation.sqlite3") as store:
   ValueError, 없는 세션은 KeyError, SQLite 입출력 오류는 SQLite 예외로 전달한다.
 - `with`를 쓰거나 `close()`로 연결을 닫는다. import만으로 DB를 생성하지 않는다.
 - 근거 위치는 사용자가 지정한 조사 근거이며 자동 심볼/RTE 해석을 의미하지 않는다.
+
+## RTE 후보와 연결
+
+[RTE Resolver](rte.md)의 RteDataDependency에서 접근 ID를 조회해 공급자 함수와
+쓰기 위치를 얻을 수 있다. 해당 함수를 `relation="rte_data"`로 조사할 때 후보의
+uncertainty를 함께 전달한다. tests/test_rte_pipeline.py는 최초 목표에서 6단계 호출
+조사 후 공급자 후보를 조사하는 전체 경로와 재개를 검증한다.
+
+SQLite에 저장되는 것은 선택한 조사 단계·근거 위치·이유·불확실성이다.
+전체 RTE 분석 결과나 후보의 구조화된 연결 ID를 별도 인덱스로 저장하지는 않는다.

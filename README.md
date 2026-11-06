@@ -5,12 +5,12 @@ AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보�
 [6단계 추적용 가상 AUTOSAR 샘플](test/README.md)을 구현했습니다.
 읽기 전용 C/H 파일 스캐너와 함수 정의·호출·분기 구문 파서를 구현했습니다.
 목표 분기·조사 경로를 보존하는 Trace Manager와 SQLite 세션 저장을 구현했습니다.
-GUI와 RTE Resolver는 아직 구현하지 않았습니다.
+이름 기반 RTE Read/Write 공급·소비 후보 분석도 구현했습니다. GUI는 아직 구현하지 않았습니다.
 
 ## 구조
 
 ```text
-src/autosar_trace_navigator/  스캐너·파서·모델·Trace Manager·SQLite 저장
+src/autosar_trace_navigator/  스캐너·파서·모델·Trace Manager·SQLite·RTE 후보 분석
 tests/                       환경·분석·탐색 상태·저장·C 실행 검증 테스트
 test/                        가상 AUTOSAR C/H 및 C 실행 하네스
 docs/architecture.md         계층 설계와 후속 단계
@@ -64,9 +64,16 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 47개와
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 59개와
 C 시나리오 12개 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
-RTE Resolver와 GUI는 후속 범위입니다.
+
+## RTE 후보 분석
+
+[RTE Resolver 사용법](docs/rte.md)에 따라 파서 결과와 Rte_*.h의 선언·매크로를
+입력하면 Read/Write 접근과 이름 기반 데이터 연결 후보를 별도로 얻을 수 있습니다.
+여러 공급자와 헤더 모호성을 유지하며 실제 ARXML 연결이나 실행 순서는 확정하지 않습니다.
+공급자 후보를 조사 단계에 추가한 뒤 SQLite에 저장·복원하는 통합 검증도 포함합니다.
+GUI는 후속 범위입니다.
 
 ## 오프라인 환경 구성
 

@@ -6,11 +6,11 @@
 
 - scanner: .c/.h 및 Rte_*.h 파일 발견. 경로 정규화 및 제외 규칙 담당.
 - parser: tree-sitter-c 구문 트리에서 함수 정의, 호출, 분기와 진단 추출.
-- model: SourceLocation(path, line), FunctionDefinition, FunctionCall,
-  Branch, ParseDiagnostic, RteDataDependency를 독립 타입으로 정의할 예정.
+- models.py: SourceRange, FunctionDefinition, FunctionCall, Branch, ParseDiagnostic.
+- rte.py: 별도의 RteAccess, RteDataDependency, RteHeaderApi 및 후보 분석 결과.
 - storage: 분석 결과와 탐색 세션의 영속화. 원본 C 소스와 분리.
-- rte(후속): 생성된 RTE 헤더와 접근 표현식을 분석하여 데이터 의존 관계 해석.
-- trace(후속): 최초 목표 분기, 탐색 단계, 조사 이유 관리.
+- rte: RTE 헤더와 명시적 Read/Write 접근을 분석하여 이름 기반 데이터 연결 후보 기록.
+- trace: 최초 목표 분기, 탐색 단계, 조사 이유 관리.
 - gui(후속): Tkinter 화면. 분석 계층을 호출하며 파싱 로직을 포함하지 않음.
 
 FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDataDependency는
@@ -18,7 +18,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 구문상 호출과 의미상 데이터 의존을 별도로 보존하고 위치로 연결한다.
 
 분기 모델은 if/else if/else의 종류, 조건(else는 없음), 본문 위치,
-부모 분기 및 체인 관계를 보존할 예정이다. 매크로 확장이나 함수 대상 식별이
+부모 분기 및 체인 관계를 보존한다. 매크로 확장이나 함수 대상 식별이
 확실하지 않으면 원문과 진단, 불확실한 상태를 남긴다. C 전처리기 실행이나
 모든 빌드 변형의 의미 분석을 보장하지 않는다.
 
@@ -29,14 +29,17 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 3. 함수/호출/분기 파서, 위치 및 불확실성 모델과 테스트(완료).
 4. 스캐너·파서 범위의 통합 검증(완료).
 5. 사용자 승인에 따른 Trace Manager·SQLite 세션 저장 및 복원(완료).
-6. RTE Resolver와 GUI는 후속 범위.
+6. 이름 기반 RTE Resolver와 Trace/SQLite 통합 검증(완료).
+7. GUI는 후속 범위.
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
 models.py는 함수 정의, 호출 구문, 분기, 위치, 진단의 불변 모델을 정의한다.
 파서가 함수/호출/분기의 위치와 불확실성을 기록하며 실제 호출 대상 연결과 RTE
-데이터 의미 해석은 수행하지 않는다. trace.py는 최초 목표 및 조사 경로를 보존하고,
+데이터 의미 해석은 파서에서 수행하지 않는다. trace.py는 최초 목표 및 조사 경로를 보존하고,
 storage.py는 그 불변 세션 스냅샷을 SQLite 트랜잭션으로 저장·복원한다.
 함수 호출 조사와 RTE 조사 이동은 별도 relation으로 기록하며 실제 연결은 해석하지 않는다.
-SQLite 세션 스키마는 분석 인덱스 저장과 분리한다. rte/gui는 후속 설계다.
-상세 계약은 [파서 문서](parser.md)를 참고한다.
+SQLite 세션 스키마는 분석 인덱스 저장과 분리한다. rte.py는 호출과 분리된
+Read/Write 접근 및 이름 기반 연결 후보를 제공한다. 실제 ARXML wiring과 매크로 확장,
+실행 순서는 해석하지 않으며 GUI는 후속 설계다.
+상세 계약은 [파서 문서](parser.md), [RTE 문서](rte.md)를 참고한다.
