@@ -45,7 +45,8 @@ IoHwAb_ReadPedalPercent → SensorAcquisition_10ms → Rte_Write_Pedal_Percent
 
 `RAW_TO_KPH(raw)`는 함수처럼 보이는 매크로입니다. tree-sitter 구문만으로
 이를 실제 함수 호출로 확정하면 안 됩니다. 현재 검증은 구문 형태만 확인하며,
-제품 파서의 매크로 불확실성 표시나 RTE 의미 해석 기능을 구현한 것은 아닙니다.
+제품 파서는 별도 tests/test_parser.py에서 매크로 불확실성과 위치를 검증합니다.
+RTE 의미 해석 기능은 아직 구현하지 않았습니다.
 
 ## 실행
 
