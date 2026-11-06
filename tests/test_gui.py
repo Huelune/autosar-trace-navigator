@@ -13,6 +13,7 @@ from unittest.mock import patch
 from autosar_trace_navigator.gui import Navigator
 from autosar_trace_navigator.workbench import analyze_project
 from test_workbench import sample_workbench
+from test_value_trace import pedal_workbench
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -211,6 +212,173 @@ class GuiTests(unittest.TestCase):
             self.app.close()
         self.assertFalse(self.app.closed)
         self.assertTrue(self.root.winfo_exists())
+
+    def use_pedal_goal(self):
+        self.app.workbench = pedal_workbench()
+        self.app.render_project()
+        self.app.refresh_trace()
+
+    def test_candidate_code_preview_does_not_change_cursor_dirty_or_source_selection(self):
+        self.app.workbench.dirty = False
+        before = self.app.workbench.session
+        location = self.app.picked_location
+        key = next(key for key, c in self.app.candidate_map.items()
+                   if c.function and c.function.name == "EvaluateBrakeMode")
+        self.app.calls.selection_set(key)
+        self.app.preview_candidate(self.app.calls)
+        self.assertIn("EvaluateBrakeMode", self.app.candidate_source.get("1.0", "end"))
+        self.assertEqual(self.app.candidate_source.cget("state"), "disabled")
+        self.assertEqual(self.app.source_notebook.select(), str(self.app.preview_tab))
+        self.assertEqual(self.app.workbench.session, before)
+        self.assertFalse(self.app.workbench.dirty)
+        self.assertEqual(self.app.picked_location, location)
+
+    def test_unresolved_candidate_preview_replaces_previous_code(self):
+        build = ROOT / "build"
+        build.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=build) as directory:
+            path = Path(directory) / "preview.c"
+            path.write_text("int Known(void) { return 1; }\n"
+                            "int F(void) { if (1) Known(); Missing(); return 0; }", encoding="utf-8")
+            project = analyze_project(directory)
+            self.app.workbench.project = project
+            function = project.functions_by_name["F"][0]
+            self.app.workbench.start(function.id, project.results[0].branches[0].id, "미확인 후보 확인")
+            self.app.refresh_trace()
+            for name in ("Known", "Missing"):
+                key = next(key for key, c in self.app.candidate_map.items() if c.label == name)
+                self.app.calls.selection_set(key)
+                self.app.preview_candidate(self.app.calls)
+            text = self.app.candidate_source.get("1.0", "end")
+            self.assertIn("대상 함수 미확인", text)
+            self.assertIn("Missing()", text)
+            self.assertNotIn("int Known", text)
+            self.assertEqual(len(self.app.workbench.session.steps), 1)
+
+    def test_value_sources_follow_updates_probe_but_preserves_goal_and_records_destination_line(self):
+        self.use_pedal_goal()
+        goal = self.app.workbench.session.variable_goal
+        self.assertIn("pedal → 60", self.app.goal.get())
+        key = next(key for key, c in self.app.candidate_map.items() if c.value_kind == "rte_data")
+        candidate = self.app.candidate_map[key]
+        self.assertIn(key, self.app.values.get_children())
+        self.app.values.selection_set(key)
+        self.app.preview_candidate(self.app.values)
+        self.assertIn("Rte_Write_Pedal_Percent", self.app.candidate_source.get("1.0", "end"))
+        with patch("autosar_trace_navigator.gui.simpledialog.askstring", return_value="pedal 공급 입력 조사"):
+            self.app.follow(self.app.values)
+        step = self.app.workbench.manager.current_step
+        self.assertEqual(step.function.name, "SensorAcquisition_10ms")
+        self.assertEqual(step.selected_location, candidate.selected_location)
+        self.assertEqual(self.app.workbench.session.variable_goal, goal)
+        self.assertIn("현재 값 조사: pedal", self.app.context.get())
+        self.assertIn(f":{candidate.selected_location.start_line}", self.app.history.item(step.id, "values")[2])
+
+    def test_selected_line_and_history_preview_are_explicit_and_return_to_recorded_line(self):
+        self.use_pedal_goal()
+        before = self.app.workbench.session
+        self.app.pick_source_position("16.23")
+        self.assertEqual(self.app.workbench.session, before)  # Merely clicking is read-only.
+        selected = self.app.picked_location
+        self.app.record_location()
+        root_step = self.app.workbench.manager.current_step
+        key = next(key for key, c in self.app.candidate_map.items() if c.value_kind == "rte_data")
+        self.app.values.selection_set(key)
+        with patch("autosar_trace_navigator.gui.simpledialog.askstring", return_value="입력 공급자"):
+            self.app.follow(self.app.values)
+        before = self.app.workbench.session
+        self.app.history.selection_set(root_step.id)
+        self.app.preview_history()
+        self.assertEqual(self.app.workbench.session, before)
+        self.assertIn("선택 위치:", self.app.detail.get("1.0", "end"))
+        self.app.select_history()
+        self.assertEqual(self.app.picked_location, selected)
+        self.assertEqual(self.app.workbench.manager.current_step.selected_location, selected)
+        self.assertIn("16.0", tuple(str(index) for index in self.app.source.tag_ranges("location")))
+
+    def test_goal_controls_and_current_variable_change_survive_save_restore(self):
+        self.use_pedal_goal()
+        self.app.workbench.start(self.app.workbench.session.target_function.id,
+                                 self.app.workbench.session.target_branch.id, "새 변수 목표")
+        self.app.refresh_trace()
+        self.app.variable.set("pedal")
+        self.app.target_value.set("60")
+        self.app.set_variable_goal()
+        goal = self.app.workbench.session.variable_goal
+        self.app.variable.set("eligible")
+        self.app.inspect_variable()
+        self.assertEqual(self.app.workbench.session.variable_goal, goal)
+        self.assertIn("현재 값 조사: eligible", self.app.context.get())
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
+            database = Path(directory) / "goal.sqlite3"
+            self.app.workbench.save(database)
+            self.app.workbench.restore(database, self.app.workbench.session.id)
+            self.app.refresh_trace()
+            self.assertIn("pedal → 60", self.app.goal.get())
+            self.assertEqual(self.app.picked_location, goal.location)
+            self.assertTrue(self.app.values.get_children())
+
+    def test_source_position_uses_byte_columns_after_unicode_comment_and_rejects_other_function(self):
+        with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
+            path = Path(directory) / "unicode.c"
+            source = "int F(void) {\n int value=0;\n /*한글*/ if (value>=60) return 1;\n return 0;\n}\nint Other(void) { return 0; }"
+            path.write_text(source, encoding="utf-8")
+            project = analyze_project(directory)
+            self.app.workbench.project = project
+            function = project.functions_by_name["F"][0]
+            self.app.workbench.start(function.id, project.results[0].branches[0].id, "한글 위치")
+            self.app.refresh_trace()
+            line = source.splitlines()[2]
+            self.app.pick_source_position(f"3.{7 + line.index('value')}")
+            location = self.app.picked_location
+            self.assertEqual(location.start_byte, dict(project.sources)[path].index(b"value>=60"))
+            self.assertEqual(location.start_column, len(line[:line.index('value')].encode()) + 1)
+            self.app.record_location()
+            before = self.app.workbench.session
+            self.app.show_source(project.functions_by_name["Other"][0].location)
+            with self.assertRaises(ValueError):
+                self.app.record_location()
+            self.assertEqual(self.app.workbench.session, before)
+
+    def test_compact_layout_with_variable_goal_keeps_new_controls_and_history_button_accessible(self):
+        self.use_pedal_goal()
+        self.root.geometry("1100x760")
+        self.root.deiconify()
+        self.root.update()
+        for widget in (self.app.variable_entry, self.app.target_entry,
+                       *(b for b in self.app.buttons if b.cget("text") in
+                         {"선택 라인 기록", "변수 목표 설정", "현재 변수 조사", "선택한 이력 단계로 이동",
+                          "선택 분기로 새 조사 시작"})):
+            with self.subTest(widget=widget):
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                     self.root.winfo_rooty() + self.root.winfo_height())
+
+    def test_source_mouse_release_records_line_only_after_explicit_button(self):
+        self.use_pedal_goal()
+        self.root.deiconify()
+        self.root.update()
+        self.app.source.see("16.23")
+        self.root.update_idletasks()
+        box = self.app.source.bbox("16.23")
+        self.assertIsNotNone(box)
+        before = self.app.workbench.session
+        self.app.source.event_generate("<ButtonRelease-1>", x=box[0] + 1, y=box[1] + 1)
+        self.root.update()
+        self.assertEqual(self.app.picked_location.start_line, 16)
+        self.assertEqual(self.app.workbench.session, before)
+        button = next(b for b in self.app.buttons if b.cget("text") == "선택 라인 기록")
+        button.invoke()
+        self.assertEqual(self.app.workbench.manager.current_step.selected_location, self.app.picked_location)
+
+    def test_history_preview_declines_mismatched_function_snapshot(self):
+        self.app.workbench.project = analyze_project(ROOT / "test" / "large_autosar",
+                                                     include_paths=("swc/Brake_000", "shared"))
+        before = self.app.workbench.session
+        self.app.history.selection_set(before.current_step_id)
+        self.app.preview_history()
+        self.assertIn("일치하지 않아", self.app.candidate_source.get("1.0", "end"))
+        self.assertEqual(self.app.workbench.session, before)
 
 
 if __name__ == "__main__":

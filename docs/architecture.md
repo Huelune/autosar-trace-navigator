@@ -11,6 +11,7 @@
 - storage: 분석 결과와 탐색 세션의 영속화. 원본 C 소스와 분리.
 - rte: RTE 헤더와 명시적 Read/Write 접근을 분석하여 이름 기반 데이터 연결 후보 기록.
 - trace: 최초 목표 분기, 탐색 단계, 조사 이유 관리.
+- dataflow: 현재 변수/반환값의 공급 후보를 요청 시 분석. 호출·RTE 모델을 참조하되 관계를 합치지 않음.
 - workbench: 입력 예산 내 선택 범위 스냅샷, 함수·호출·RTE 조회 인덱스와 검색 페이지, 조사·저장 액션.
 - gui: Tkinter 화면. 워커 분석과 메인 스레드 위젯 갱신을 분리하며 파싱 로직을 포함하지 않음.
 
@@ -33,6 +34,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 6. 이름 기반 RTE Resolver와 Trace/SQLite 통합 검증(완료).
 7. Tkinter GUI와 실제 위젯·클릭 검증(완료).
 8. 선택 범위 분석·검색 중심 GUI와 표시 상한 검증(완료). 증분 캐시는 후속 범위.
+9. 변수값 출처 후보·고정 변수 목표·선택 위치 저장 및 후보/이력 코드 미리보기(완료).
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
@@ -45,4 +47,8 @@ SQLite 세션 스키마는 분석 인덱스 저장과 분리한다. rte.py는 �
 Read/Write 접근 및 이름 기반 연결 후보를 제공한다. 실제 ARXML wiring과 매크로 확장,
 실행 순서는 해석하지 않는다. workbench.py와 gui.py가 위 API를 조합해 목표·조사 경로·이유를
 보존하는 로컬 화면을 제공한다. 원본 소스는 변경하지 않는다.
+ValueProbe는 현재 사용 위치를, VariableGoal은 첫 변수·목표값을 별도로 보존한다.
+ValueResolver는 스냅샷에서 파일별 구문 트리를 필요할 때 구성한다. GUI의 후보 열람은
+세션을 수정하지 않고 명시적인 조사 이동/위치 기록만 Workbench 액션을 호출한다.
+값 출처는 구문·이름 기반 후보이며 제약 해결이나 조건 충족 증명은 수행하지 않는다.
 상세 계약은 [파서 문서](parser.md), [RTE 문서](rte.md)를 참고한다.
