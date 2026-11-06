@@ -1,0 +1,367 @@
+{
+  "components": [
+    {
+      "name": "Brake_000",
+      "threshold": 20,
+      "scope": "swc/Brake_000",
+      "trace": [
+        "Brake_000_10ms",
+        "Brake_000_Evaluate",
+        "Brake_000_Decide",
+        "Brake_000_Eligible",
+        "Brake_000_Validated",
+        "Brake_000_Decode",
+        "Brake_000_Read"
+      ],
+      "backup_producer": true
+    },
+    {
+      "name": "Steering_001",
+      "threshold": 25,
+      "scope": "swc/Steering_001",
+      "trace": [
+        "Steering_001_10ms",
+        "Steering_001_Evaluate",
+        "Steering_001_Decide",
+        "Steering_001_Eligible",
+        "Steering_001_Validated",
+        "Steering_001_Decode",
+        "Steering_001_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Battery_002",
+      "threshold": 30,
+      "scope": "swc/Battery_002",
+      "trace": [
+        "Battery_002_10ms",
+        "Battery_002_Evaluate",
+        "Battery_002_Decide",
+        "Battery_002_Eligible",
+        "Battery_002_Validated",
+        "Battery_002_Decode",
+        "Battery_002_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Thermal_003",
+      "threshold": 35,
+      "scope": "swc/Thermal_003",
+      "trace": [
+        "Thermal_003_10ms",
+        "Thermal_003_Evaluate",
+        "Thermal_003_Decide",
+        "Thermal_003_Eligible",
+        "Thermal_003_Validated",
+        "Thermal_003_Decode",
+        "Thermal_003_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Lighting_004",
+      "threshold": 40,
+      "scope": "swc/Lighting_004",
+      "trace": [
+        "Lighting_004_10ms",
+        "Lighting_004_Evaluate",
+        "Lighting_004_Decide",
+        "Lighting_004_Eligible",
+        "Lighting_004_Validated",
+        "Lighting_004_Decode",
+        "Lighting_004_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Door_005",
+      "threshold": 20,
+      "scope": "swc/Door_005",
+      "trace": [
+        "Door_005_10ms",
+        "Door_005_Evaluate",
+        "Door_005_Decide",
+        "Door_005_Eligible",
+        "Door_005_Validated",
+        "Door_005_Decode",
+        "Door_005_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Seat_006",
+      "threshold": 25,
+      "scope": "swc/Seat_006",
+      "trace": [
+        "Seat_006_10ms",
+        "Seat_006_Evaluate",
+        "Seat_006_Decide",
+        "Seat_006_Eligible",
+        "Seat_006_Validated",
+        "Seat_006_Decode",
+        "Seat_006_Read"
+      ],
+      "backup_producer": true
+    },
+    {
+      "name": "Wiper_007",
+      "threshold": 30,
+      "scope": "swc/Wiper_007",
+      "trace": [
+        "Wiper_007_10ms",
+        "Wiper_007_Evaluate",
+        "Wiper_007_Decide",
+        "Wiper_007_Eligible",
+        "Wiper_007_Validated",
+        "Wiper_007_Decode",
+        "Wiper_007_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Cluster_008",
+      "threshold": 35,
+      "scope": "swc/Cluster_008",
+      "trace": [
+        "Cluster_008_10ms",
+        "Cluster_008_Evaluate",
+        "Cluster_008_Decide",
+        "Cluster_008_Eligible",
+        "Cluster_008_Validated",
+        "Cluster_008_Decode",
+        "Cluster_008_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Cruise_009",
+      "threshold": 40,
+      "scope": "swc/Cruise_009",
+      "trace": [
+        "Cruise_009_10ms",
+        "Cruise_009_Evaluate",
+        "Cruise_009_Decide",
+        "Cruise_009_Eligible",
+        "Cruise_009_Validated",
+        "Cruise_009_Decode",
+        "Cruise_009_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Parking_010",
+      "threshold": 20,
+      "scope": "swc/Parking_010",
+      "trace": [
+        "Parking_010_10ms",
+        "Parking_010_Evaluate",
+        "Parking_010_Decide",
+        "Parking_010_Eligible",
+        "Parking_010_Validated",
+        "Parking_010_Decode",
+        "Parking_010_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Charging_011",
+      "threshold": 25,
+      "scope": "swc/Charging_011",
+      "trace": [
+        "Charging_011_10ms",
+        "Charging_011_Evaluate",
+        "Charging_011_Decide",
+        "Charging_011_Eligible",
+        "Charging_011_Validated",
+        "Charging_011_Decode",
+        "Charging_011_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Brake_012",
+      "threshold": 30,
+      "scope": "swc/Brake_012",
+      "trace": [
+        "Brake_012_10ms",
+        "Brake_012_Evaluate",
+        "Brake_012_Decide",
+        "Brake_012_Eligible",
+        "Brake_012_Validated",
+        "Brake_012_Decode",
+        "Brake_012_Read"
+      ],
+      "backup_producer": true
+    },
+    {
+      "name": "Steering_013",
+      "threshold": 35,
+      "scope": "swc/Steering_013",
+      "trace": [
+        "Steering_013_10ms",
+        "Steering_013_Evaluate",
+        "Steering_013_Decide",
+        "Steering_013_Eligible",
+        "Steering_013_Validated",
+        "Steering_013_Decode",
+        "Steering_013_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Battery_014",
+      "threshold": 40,
+      "scope": "swc/Battery_014",
+      "trace": [
+        "Battery_014_10ms",
+        "Battery_014_Evaluate",
+        "Battery_014_Decide",
+        "Battery_014_Eligible",
+        "Battery_014_Validated",
+        "Battery_014_Decode",
+        "Battery_014_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Thermal_015",
+      "threshold": 20,
+      "scope": "swc/Thermal_015",
+      "trace": [
+        "Thermal_015_10ms",
+        "Thermal_015_Evaluate",
+        "Thermal_015_Decide",
+        "Thermal_015_Eligible",
+        "Thermal_015_Validated",
+        "Thermal_015_Decode",
+        "Thermal_015_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Lighting_016",
+      "threshold": 25,
+      "scope": "swc/Lighting_016",
+      "trace": [
+        "Lighting_016_10ms",
+        "Lighting_016_Evaluate",
+        "Lighting_016_Decide",
+        "Lighting_016_Eligible",
+        "Lighting_016_Validated",
+        "Lighting_016_Decode",
+        "Lighting_016_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Door_017",
+      "threshold": 30,
+      "scope": "swc/Door_017",
+      "trace": [
+        "Door_017_10ms",
+        "Door_017_Evaluate",
+        "Door_017_Decide",
+        "Door_017_Eligible",
+        "Door_017_Validated",
+        "Door_017_Decode",
+        "Door_017_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Seat_018",
+      "threshold": 35,
+      "scope": "swc/Seat_018",
+      "trace": [
+        "Seat_018_10ms",
+        "Seat_018_Evaluate",
+        "Seat_018_Decide",
+        "Seat_018_Eligible",
+        "Seat_018_Validated",
+        "Seat_018_Decode",
+        "Seat_018_Read"
+      ],
+      "backup_producer": true
+    },
+    {
+      "name": "Wiper_019",
+      "threshold": 40,
+      "scope": "swc/Wiper_019",
+      "trace": [
+        "Wiper_019_10ms",
+        "Wiper_019_Evaluate",
+        "Wiper_019_Decide",
+        "Wiper_019_Eligible",
+        "Wiper_019_Validated",
+        "Wiper_019_Decode",
+        "Wiper_019_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Cluster_020",
+      "threshold": 20,
+      "scope": "swc/Cluster_020",
+      "trace": [
+        "Cluster_020_10ms",
+        "Cluster_020_Evaluate",
+        "Cluster_020_Decide",
+        "Cluster_020_Eligible",
+        "Cluster_020_Validated",
+        "Cluster_020_Decode",
+        "Cluster_020_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Cruise_021",
+      "threshold": 25,
+      "scope": "swc/Cruise_021",
+      "trace": [
+        "Cruise_021_10ms",
+        "Cruise_021_Evaluate",
+        "Cruise_021_Decide",
+        "Cruise_021_Eligible",
+        "Cruise_021_Validated",
+        "Cruise_021_Decode",
+        "Cruise_021_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Parking_022",
+      "threshold": 30,
+      "scope": "swc/Parking_022",
+      "trace": [
+        "Parking_022_10ms",
+        "Parking_022_Evaluate",
+        "Parking_022_Decide",
+        "Parking_022_Eligible",
+        "Parking_022_Validated",
+        "Parking_022_Decode",
+        "Parking_022_Read"
+      ],
+      "backup_producer": false
+    },
+    {
+      "name": "Charging_023",
+      "threshold": 35,
+      "scope": "swc/Charging_023",
+      "trace": [
+        "Charging_023_10ms",
+        "Charging_023_Evaluate",
+        "Charging_023_Decide",
+        "Charging_023_Eligible",
+        "Charging_023_Validated",
+        "Charging_023_Decode",
+        "Charging_023_Read"
+      ],
+      "backup_producer": false
+    }
+  ],
+  "c_files": 122,
+  "h_files": 49,
+  "runtime_scenarios": 192
+}

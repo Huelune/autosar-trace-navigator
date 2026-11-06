@@ -110,7 +110,7 @@ class ScannerTests(unittest.TestCase):
             }
 
         before = snapshot()
-        result = scan_sources(sample, exclude_paths=("parser_cases",))
+        result = scan_sources(sample, include_paths=("include", "src", "support"))
         self.assertEqual({item.relative_path.as_posix() for item in result}, {
             "include/BrakeControl.h", "include/Rte_BrakeControl.h",
             "include/Rte_SensorAcquisition.h", "include/Std_Types.h",

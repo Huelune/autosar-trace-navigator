@@ -1,11 +1,8 @@
 """Fixture validation only; this is not the application's future C parser."""
 
-import os
 from pathlib import Path
-import shutil
-import subprocess
-import tempfile
 import unittest
+from c_build import run_c99
 
 from tree_sitter import Language, Parser
 import tree_sitter_c
@@ -33,7 +30,7 @@ class AutosarSampleStructureTests(unittest.TestCase):
         cls.trees = {
             path: parser.parse(path.read_bytes())
             for path in sorted(SAMPLE.rglob("*"))
-            if path.suffix in {".c", ".h"} and "parser_cases" not in path.parts
+            if path.suffix in {".c", ".h"} and not {"parser_cases", "large_autosar"}.intersection(path.parts)
         }
         cls.functions = {}
         for path, tree in cls.trees.items():
@@ -101,39 +98,10 @@ class AutosarSampleStructureTests(unittest.TestCase):
 
 class AutosarSampleExecutionTests(unittest.TestCase):
     def test_compile_and_run_all_c_scenarios(self):
-        local_zig = ROOT / ".venv" / "c-tools" / "ziglang" / "zig.exe"
-        if local_zig.is_file():
-            compiler = [str(local_zig), "cc"]
-        elif zig := shutil.which("zig"):
-            compiler = [zig, "cc"]
-        elif cc := (shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")):
-            compiler = [cc]
-        else:
-            self.skipTest("C compiler unavailable; see test/README.md for setup")
-
-        build = ROOT / "build"
-        build.mkdir(exist_ok=True)
-        with tempfile.TemporaryDirectory(prefix="c-sample-", dir=build) as directory:
-            executable = Path(directory) / ("brake_test.exe" if os.name == "nt" else "brake_test")
-            sources = sorted((SAMPLE / "src").glob("*.c")) + sorted((SAMPLE / "support").glob("*.c"))
-            command = compiler + [
-                "-std=c99", "-Wall", "-Wextra", "-Werror", "-pedantic",
-                "-I", str(SAMPLE / "include"),
-                *map(str, sources), "-o", str(executable),
-            ]
-            env = os.environ.copy()
-            for name in ("TMP", "TEMP", "TMPDIR"):
-                env[name] = directory
-            env["ZIG_GLOBAL_CACHE_DIR"] = str(build / "zig-cache")
-            env["ZIG_LOCAL_CACHE_DIR"] = str(build / "zig-local-cache")
-            result = subprocess.run(command, capture_output=True, text=True,
-                                    env=env, timeout=180)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            result = subprocess.run([str(executable)], capture_output=True,
-                                    text=True, timeout=10)
-            self.assertEqual(result.returncode, 0, result.stdout + result.stderr)
-            self.assertIn("PASS all 12 scenarios", result.stdout)
-            print("\n" + result.stdout, end="")
+        sources = sorted((SAMPLE / "src").glob("*.c")) + sorted((SAMPLE / "support").glob("*.c"))
+        output = run_c99(sources, include_dirs=(SAMPLE / "include",))
+        self.assertIn("PASS all 12 scenarios", output)
+        print("\n" + output, end="")
 
 
 if __name__ == "__main__":

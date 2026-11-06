@@ -17,7 +17,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class RtePipelineTests(unittest.TestCase):
     def setUp(self):
-        self.sources = scan_sources(ROOT / "test", exclude_paths=("parser_cases",))
+        self.sources = scan_sources(ROOT / "test", include_paths=("include", "src", "support"))
         self.before = {s.path: (hashlib.sha256(s.path.read_bytes()).digest(), s.path.stat().st_mtime_ns)
                        for s in self.sources}
         self.results = tuple(parse_file(s.path) for s in self.sources)

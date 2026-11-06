@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 def sample_workbench() -> Workbench:
     """Start at the virtual AUTOSAR target branch."""
     workbench = Workbench()
-    workbench.project = analyze_project(ROOT / "test", exclude_paths=("parser_cases",))
+    workbench.project = analyze_project(ROOT / "test", include_paths=("include", "src", "support"))
     function = next(f for f in workbench.project.functions if f.name == "BrakeControl_10ms")
     branch = next(b for r in workbench.project.results for b in r.branches
                   if b.condition == "(mode == BRAKE_ASSIST)")

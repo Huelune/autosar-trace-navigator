@@ -108,7 +108,7 @@ class ParserTests(unittest.TestCase):
                         .issubset({d.code for d in result.diagnostics}))
 
     def test_six_step_autosar_trace_with_product_parser_and_unchanged_sources(self):
-        paths = [item.path for item in scan_sources(ROOT / "test", exclude_paths=("parser_cases",))]
+        paths = [item.path for item in scan_sources(ROOT / "test", include_paths=("include", "src", "support"))]
         before = {path: (hashlib.sha256(path.read_bytes()).digest(), path.stat().st_mtime_ns)
                   for path in paths}
         results = [parse_file(path) for path in paths]

@@ -13,7 +13,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 class PipelineTests(unittest.TestCase):
     def test_mixed_project_preserves_locations_references_and_error_isolation(self):
-        sources = scan_sources(ROOT / "test")
+        sources = scan_sources(ROOT / "test", include_paths=("include", "src", "support", "parser_cases"))
         results = tuple(parse_file(source.path) for source in sources)
         self.assertEqual(len(sources), 14)
         self.assertEqual(tuple(result.path for result in results), tuple(s.path for s in sources))

@@ -138,6 +138,7 @@ class GuiTests(unittest.TestCase):
 
     def test_actual_background_analysis_completes_on_tk_thread(self):
         self.app.exclusions.set("parser_cases")
+        self.app.scopes.set("include;src;support")
         self.app.begin_analysis(ROOT / "test")
         deadline = time.monotonic() + 10
         while self.app.busy and time.monotonic() < deadline:

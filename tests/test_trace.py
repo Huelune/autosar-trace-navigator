@@ -14,7 +14,7 @@ ROOT = Path(__file__).resolve().parents[1]
 
 def sample_manager() -> tuple[TraceManager, dict]:
     """Build an investigation at the sample's ASSIST branch."""
-    results = [parse_file(s.path) for s in scan_sources(ROOT / "test", exclude_paths=("parser_cases",))]
+    results = [parse_file(s.path) for s in scan_sources(ROOT / "test", include_paths=("include", "src", "support"))]
     functions = {f.name: f for r in results for f in r.functions}
     target = next(b for r in results for b in r.branches if b.condition == "(mode == BRAKE_ASSIST)")
     return TraceManager.start(functions["BrakeControl_10ms"], target,
