@@ -25,6 +25,16 @@ class ValueSource:
     uncertainty: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ExecutionRequirement:
+    function_id: str
+    expression: str
+    required_truth: bool
+    location: SourceRange
+    variables: tuple[ValueProbe, ...]
+    uncertainty: tuple[str, ...]
+
+
 def _walk(node: Node) -> Iterator[Node]:
     stack = [node]
     while stack:
@@ -62,6 +72,54 @@ class ValueResolver:
     def _location(self, path: Path, node: Node) -> SourceRange:
         return SourceRange(path, node.start_point.row + 1, node.start_point.column + 1,
                            node.end_point.row + 1, node.end_point.column + 1, node.start_byte, node.end_byte)
+
+    def conditions(self, site: SourceRange) -> tuple[ExecutionRequirement, ...]:
+        """Structural if/else prerequisites, including false preceding arms of a chain."""
+        owner = next((fn for fn in self.project.functions if fn.location.path == site.path
+                      and fn.body_location.start_byte <= site.start_byte < fn.body_location.end_byte
+                      and site.end_byte <= fn.body_location.end_byte), None)
+        if owner is None:
+            return ()
+        branches = [branch for result in self.project.results for branch in result.branches
+                    if branch.function_id == owner.id]
+        containing = [branch for branch in branches
+                      if branch.body_location.start_byte <= site.start_byte < branch.body_location.end_byte
+                      and site.end_byte <= branch.body_location.end_byte]
+        requirements = []
+        seen = set()
+        nodes = {node.start_byte: node for node in _walk(self._function(owner.id))
+                 if node.type == "if_statement"}
+        for selected in containing:
+            chain = [branch for branch in branches if branch.chain_id == selected.chain_id
+                     and branch.location.start_byte <= selected.location.start_byte and branch.condition]
+            for branch in chain:
+                truth = branch.id == selected.id
+                if (branch.id, truth) in seen:
+                    continue
+                seen.add((branch.id, truth))
+                syntax = nodes.get(branch.location.start_byte)
+                condition = syntax.child_by_field_name("condition") if syntax else None
+                if condition is None:
+                    continue
+                variables = []
+                for identifier in _walk(condition):
+                    if identifier.type != "identifier":
+                        continue
+                    parent = identifier.parent
+                    if parent.type == "call_expression" and parent.child_by_field_name("function") == identifier:
+                        continue
+                    # Member/pointer outputs are not same-spelled local variable uses.
+                    if any(ancestor.type in {"field_expression", "pointer_expression", "subscript_expression"}
+                           for ancestor in _ancestors(identifier, condition)):
+                        continue
+                    name = identifier.text.decode("utf-8", errors="replace")
+                    if not any(probe.expression == name for probe in variables):
+                        variables.append(ValueProbe(owner.id, name, self._location(site.path, identifier)))
+                requirements.append(ExecutionRequirement(
+                    owner.id, branch.condition, truth, self._location(site.path, condition), tuple(variables),
+                    tuple(dict.fromkeys((*owner.uncertainty, *branch.uncertainty, "structural_conditions_only",
+                                         "earlier_exit_loop_switch_not_resolved", "condition_satisfiability_not_proven")))))
+        return tuple(requirements)
 
     def sources(self, probe: ValueProbe) -> tuple[ValueSource, ...]:
         """Find source candidates for a simple variable or all returns of a function."""
@@ -128,8 +186,12 @@ class ValueResolver:
                 # Compound member/pointer expressions are boundaries, not same-spelled local identifiers.
                 if expression.type in {"binary_expression", "unary_expression", "conditional_expression"}:
                     seen = set()
-                    for child in expression.named_children:
-                        if child.type == "identifier" and child.text not in seen:
+                    for child in _walk(expression):
+                        if (child.type == "identifier" and child.text not in seen
+                                and not (child.parent.type == "call_expression"
+                                         and child.parent.child_by_field_name("function") == child)
+                                and not any(ancestor.type in {"field_expression", "pointer_expression", "subscript_expression"}
+                                            for ancestor in _ancestors(child, expression))):
                             seen.add(child.text)
                             add(owner, "expression_operand", child.text.decode(), site,
                                 ValueProbe(owner, child.text.decode(), self._location(point.path, child)),
@@ -213,6 +275,25 @@ class ValueResolver:
                             expression_sources(arguments.named_children[parameter_index], caller.id, "parameter_input",
                                                call.location, ("name_only_caller_candidate", "call_context_not_bound"))
             if not locals_found:
+                declarations = []
+                for declaration_path in self._bytes:
+                    if declaration_path != path and declaration_path.suffix.lower() != ".h":
+                        continue
+                    for declaration in self._root(declaration_path).named_children:
+                        if declaration.type == "declaration" and any(
+                            _name(child.child_by_field_name("declarator") if child.type == "init_declarator" else child) == variable
+                            for child in declaration.named_children
+                            if not any(part.type == "function_declarator" for part in _walk(child))
+                        ):
+                            declarations.append((declaration_path, declaration))
+                if declarations and not any(
+                    child.type in {"storage_class_specifier", "type_qualifier"} and child.text in {b"static", b"const"}
+                    for _, declaration in declarations for child in declaration.named_children
+                ):
+                    declaration_path, declaration = declarations[0]
+                    add(function.id, "ct_global_input", variable, probe.location, extra=(
+                        "external_linkage_name_candidate", "ct_accessibility_not_verified",
+                        "header_visibility_not_verified", f"declaration: {declaration_path}:{declaration.start_point.row + 1}"))
                 # Deliberately file-local lookup; do not merge same-spelled globals in other files.
                 global_known = any(n.type == "declaration" and n.parent.type != "compound_statement"
                                    and any(_name(c.child_by_field_name("declarator") if c.type == "init_declarator" else c) == variable
@@ -233,3 +314,10 @@ class ValueResolver:
                 add(function.id, "input_boundary", variable, probe.location,
                     extra=("no_supported_source_in_analysis_scope",))
         return tuple(sorted(result, key=lambda s: (s.location.path.as_posix(), -s.location.start_byte, s.expression)))
+
+
+def _ancestors(node: Node, stop: Node) -> Iterator[Node]:
+    parent = node.parent
+    while parent is not None and parent != stop:
+        yield parent
+        parent = parent.parent

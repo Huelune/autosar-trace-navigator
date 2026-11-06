@@ -192,7 +192,7 @@ class Workbench:
 
     def follow(self, candidate: InvestigationCandidate, reason: str) -> None:
         if (self.manager is None or candidate.function is None
-                or candidate not in (*self.candidates(), *self.value_candidates())):
+                or candidate not in (*self.candidates(), *self.value_candidates(), *self.execution_candidates())):
             raise ValueError("조사할 함수가 확인되지 않았거나 현재 단계의 후보가 아닙니다.")
         self.manager.follow(candidate.function, reason=reason, relation=candidate.relation,
                             evidence=candidate.evidence, uncertainty=candidate.uncertainty,
@@ -206,12 +206,40 @@ class Workbench:
         if self.project.functions_by_id.get(step.function.id) != step.function:
             return ()
         sources = self.project.value_resolver.sources(step.probe)
+        requirements = tuple(reason for reason in step.uncertainty if reason.startswith("execution_requirement_"))
         return tuple(InvestigationCandidate(
             self.project.functions_by_id.get(source.function_id), f"{source.kind}: {source.expression}",
             "rte_data" if "name_only_connection" in source.uncertainty else "value", source.location,
-            source.uncertainty, source.next_probe,
+            tuple(dict.fromkeys((*source.uncertainty, *requirements))), source.next_probe,
             source.next_probe.location if source.next_probe else source.location, source.kind)
             for source in sources)
+
+    def execution_candidates(self) -> tuple[InvestigationCandidate, ...]:
+        """Open condition-variable investigations as alternative children, not runtime order."""
+        if self.manager is None or self.project is None:
+            return ()
+        step = self.manager.current_step
+        if self.project.functions_by_id.get(step.function.id) != step.function:
+            return ()
+        requirements = []
+        for site in (step.selected_location, step.evidence):
+            if site is not None:
+                for requirement in self.project.value_resolver.conditions(site):
+                    if requirement not in requirements:
+                        requirements.append(requirement)
+        candidates = []
+        context = tuple(reason for reason in step.uncertainty if reason.startswith("execution_requirement_"))
+        for requirement in requirements:
+            truth = "참" if requirement.required_truth else "거짓"
+            note = f"execution_requirement_{'true' if requirement.required_truth else 'false'}: {requirement.expression}"
+            for probe in requirement.variables or (None,):
+                candidates.append(InvestigationCandidate(
+                    self.project.functions_by_id[requirement.function_id],
+                    f"{truth} 필요: {requirement.expression} → {probe.expression if probe else '조건식 검토'}",
+                    "value", requirement.location,
+                    tuple(dict.fromkeys((*requirement.uncertainty, *context, note))), probe,
+                    probe.location if probe else requirement.location, "execution_condition"))
+        return tuple(candidates)
 
     def set_variable_goal(self, variable: str, target_value: str, location: SourceRange) -> None:
         self.session

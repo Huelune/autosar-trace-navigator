@@ -80,8 +80,12 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 118개와
-C 시나리오 204개(기존 12개 + 확장 192개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 127개와
+C 시나리오 210개(기존 12개 + 확장 192개 + 실행 조건 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+
+**실행 조건** 탭에서는 값을 만드는 코드의 조건 변수를 별도 하위 조사로 따라갑니다.
+extern 등 외부 연결 이름의 전역을 CT 제어 후보로 표시하며 static·const는 제외합니다.
+실제 CT 접근성은 확인이 필요합니다. [목표 상수 없는 계산·조건 예제](test/value_paths/README.md)를 참고하세요.
 
 ## 확장 C 프로젝트
 

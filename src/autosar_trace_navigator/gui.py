@@ -114,7 +114,7 @@ class Navigator(ttk.Frame):
         self.variable = tk.StringVar()
         self.variable_entry = ttk.Entry(value_controls, textvariable=self.variable, width=18)
         self.variable_entry.pack(side="left", padx=4)
-        ttk.Label(value_controls, text="목표값").pack(side="left")
+        ttk.Label(value_controls, text="최초 목표값").pack(side="left")
         self.target_value = tk.StringVar()
         self.target_entry = ttk.Entry(value_controls, textvariable=self.target_value, width=12)
         self.target_entry.pack(side="left", padx=4)
@@ -176,22 +176,25 @@ class Navigator(ttk.Frame):
         ttk.Label(right, text="확정되지 않은 조사 후보").pack(anchor="w")
         candidates = ttk.Notebook(right)
         candidates.pack(fill="both", expand=True)
-        call_tab, rte_tab, value_tab = (ttk.Frame(candidates) for _ in range(3))
+        call_tab, rte_tab, value_tab, condition_tab = (ttk.Frame(candidates) for _ in range(4))
         candidates.add(call_tab, text="호출 후보")
         candidates.add(rte_tab, text="RTE 공급자 후보")
         candidates.add(value_tab, text="변수 값 출처")
+        candidates.add(condition_tab, text="실행 조건")
         self.calls = _tree(call_tab, ("호출", "대상 / 위치"), 5)
         self.rte = _tree(rte_tab, ("데이터", "공급자 / 위치"), 5)
         self.values = _tree(value_tab, ("값 출처", "대상 / 위치"), 5)
-        self.candidate_tables = (self.calls, self.rte, self.values)
+        self.requirements = _tree(condition_tab, ("필요 조건 / 조사 변수", "대상 / 위치"), 5)
+        self.candidate_tables = (self.calls, self.rte, self.values, self.requirements)
         self.candidate_map = {}
         for table in self.candidate_tables:
             table.bind("<<TreeviewSelect>>", lambda event, table=table: self.preview_candidate(table))
         self.button(call_tab, "호출 후보 조사", lambda: self.follow(self.calls)).pack(fill="x")
         self.button(rte_tab, "RTE 공급자 후보 조사", lambda: self.follow(self.rte)).pack(fill="x")
         self.button(value_tab, "선택 출처 조사", lambda: self.follow(self.values)).pack(fill="x")
+        self.button(condition_tab, "조건 변수 하위 조사", lambda: self.follow(self.requirements)).pack(fill="x")
         self.detail = _text(right, 4)
-        ttk.Label(right, text="전체 조사 이력 (대안 경로 포함)").pack(anchor="w", pady=(6, 0))
+        ttk.Label(right, text="조사 트리 — 실행 순서와 별개").pack(anchor="w", pady=(6, 0))
         self.history = _tree(right, ("현재 / 관계", "함수", "선택 위치", "조사 이유"), 4)
         self.history.bind("<<TreeviewSelect>>", self.preview_history)
         self.button(right, "선택한 이력 단계로 이동", self.select_history).pack(fill="x", pady=4)
@@ -464,26 +467,38 @@ class Navigator(ttk.Frame):
         value_context = f" | 현재 값 조사: {probe.expression} ({probe.kind})" if probe else ""
         self.context.set(f"현재: {manager.current_step.function.name} | 조사 이유: {manager.current_step.reason}{note}\n"
                          + "경로: " + " → ".join(step.function.name for step in manager.current_path) + value_context)
+        requirements = [reason.split(": ", 1)[1] + (" → 참 필요" if reason.startswith("execution_requirement_true:") else " → 거짓 필요")
+                        for reason in manager.current_step.uncertainty if reason.startswith("execution_requirement_")]
+        if requirements:
+            self.context.set(self.context.get() + "\n하위 조사 조건: " + " / ".join(requirements))
         if probe and probe.kind == "variable":
             self.variable.set(probe.expression)
         if objective:
             self.target_value.set(objective.target_value)
-        for index, candidate in enumerate((*self.workbench.candidates(), *self.workbench.value_candidates())):
+        for index, candidate in enumerate((*self.workbench.candidates(), *self.workbench.value_candidates(),
+                                           *self.workbench.execution_candidates())):
             key = str(index)
             self.candidate_map[key] = candidate
-            table = (self.values if candidate.value_kind else
+            table = (self.requirements if candidate.value_kind == "execution_condition" else
+                     self.values if candidate.value_kind else
                      self.calls if candidate.relation == "call" else self.rte)
             destination = candidate.function
             site = candidate.selected_location or (destination.location if destination else candidate.evidence)
             label = (f"{site.start_line}행 · {site.path.name} — {destination.name}"
                      if destination else "현재 분석 범위에서 미확인 — 이동 불가")
-            table.insert("", "end", iid=key, values=(candidate.label, label))
+            candidate_label = candidate.label
+            if candidate.value_kind == "ct_global_input":
+                candidate_label = "CT 전역 제어 후보: " + candidate.label.split(": ", 1)[1]
+            table.insert("", "end", iid=key, values=(candidate_label, label))
+        paths, child_counts = {}, {}
         for step in manager.session.steps:
             marker = "▶ " if step.id == manager.session.current_step_id else ""
+            child_counts[step.parent_id] = child_counts.get(step.parent_id, 0) + 1
+            paths[step.id] = (paths[step.parent_id] + "." if step.parent_id else "") + str(child_counts[step.parent_id])
             site = step.selected_location
             label = f"{site.start_line}행 · {site.path.name}" if site else "미기록 (이전 세션)"
             self.history.insert("", "end", iid=step.id,
-                                values=(marker + step.relation, step.function.name, label, step.reason))
+                                values=(marker + paths[step.id] + " · " + step.relation, step.function.name, label, step.reason))
         current = manager.current_step.function
         self.render_function_page(self.page_offset)
         if self.functions.exists(current.id):
@@ -497,9 +512,13 @@ class Navigator(ttk.Frame):
         selected = table.selection()
         candidate = self.candidate_map.get(selected[0]) if selected else None
         if candidate:
+            guards = self.workbench.project.value_resolver.conditions(candidate.evidence) if self.workbench.project else ()
+            conditions = "\n".join(f"{'참' if guard.required_truth else '거짓'} 필요: {guard.expression}"
+                                   for guard in guards)
             _set_text(self.detail, f"{candidate.relation}: {candidate.label}\n"
                       f"근거: {candidate.evidence.path}:{candidate.evidence.start_line}\n"
-                      "확정되지 않은 후보 / 검토 사항:\n" + "\n".join(candidate.uncertainty))
+                      + ("이 지점의 구조상 실행 조건 (도달 미증명):\n" + conditions + "\n" if conditions else "")
+                      + "확정되지 않은 후보 / 검토 사항:\n" + "\n".join(candidate.uncertainty))
             location = candidate.selected_location or (candidate.function.location if candidate.function else candidate.evidence)
             self.show_preview(candidate.function, location, "후보 코드 — 이동 전 확인")
 

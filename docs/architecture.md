@@ -35,6 +35,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 7. Tkinter GUI와 실제 위젯·클릭 검증(완료).
 8. 선택 범위 분석·검색 중심 GUI와 표시 상한 검증(완료). 증분 캐시는 후속 범위.
 9. 변수값 출처 후보·고정 변수 목표·선택 위치 저장 및 후보/이력 코드 미리보기(완료).
+10. 외부 연결 전역의 CT 제어 후보 및 구조상 실행 조건의 반복 하위 조사(완료).
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.
@@ -51,4 +52,7 @@ ValueProbe는 현재 사용 위치를, VariableGoal은 첫 변수·목표값을 
 ValueResolver는 스냅샷에서 파일별 구문 트리를 필요할 때 구성한다. GUI의 후보 열람은
 세션을 수정하지 않고 명시적인 조사 이동/위치 기록만 Workbench 액션을 호출한다.
 값 출처는 구문·이름 기반 후보이며 제약 해결이나 조건 충족 증명은 수행하지 않는다.
+ExecutionRequirement는 선택 지점의 구조상 조건과 필요한 참/거짓·변수 probe를 제공한다.
+호출·RTE와 별개의 값/조건 조사로서 TraceStep의 부모 참조를 사용해 조사 트리를 보존한다.
+CT 접근성은 외부 연결 이름을 바탕으로 한 후보이며 static·const는 제외한다.
 상세 계약은 [파서 문서](parser.md), [RTE 문서](rte.md)를 참고한다.

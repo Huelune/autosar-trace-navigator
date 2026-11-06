@@ -30,7 +30,7 @@ class AutosarSampleStructureTests(unittest.TestCase):
         cls.trees = {
             path: parser.parse(path.read_bytes())
             for path in sorted(SAMPLE.rglob("*"))
-            if path.suffix in {".c", ".h"} and not {"parser_cases", "large_autosar"}.intersection(path.parts)
+            if path.suffix in {".c", ".h"} and not {"parser_cases", "large_autosar", "value_paths"}.intersection(path.parts)
         }
         cls.functions = {}
         for path, tree in cls.trees.items():
