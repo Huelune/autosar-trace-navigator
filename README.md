@@ -35,8 +35,12 @@ python -m venv .venv
 .venv\Scripts\python -m autosar_trace_navigator
 ```
 
-소스 폴더 분석 → 함수·목표 분기 선택 → 조사 이유 입력 → 호출/RTE 후보 조사 →
+루트 선택 → 파일/폴더 범위 지정·분석 → 함수 검색·목표 분기 선택 → 조사 이유 입력 → 호출/RTE 후보 조사 →
 SQLite 저장·복원을 지원합니다. [GUI 사용법](docs/gui.md)을 참고하세요.
+
+전체 함수를 자동으로 나열하지 않고 검색 결과를 100개씩 표시합니다. 분석은 선택 범위에
+제한하며 기본 500파일·파일당 4 MiB·소스 합계 32 MiB의 예산을 적용합니다.
+[범위 분석과 검색](docs/scoped-analysis.md)을 참고하세요. 증분 캐시는 아직 제공하지 않습니다.
 
 ## 스캐너 사용
 
@@ -73,7 +77,7 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 73개와
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 84개와
 C 시나리오 12개 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
 
 ## RTE 후보 분석

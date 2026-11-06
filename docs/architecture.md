@@ -4,14 +4,14 @@
 
 읽기 전용 C 소스 → scanner → parser → 분석 모델 → storage(SQLite)
 
-- scanner: .c/.h 및 Rte_*.h 파일 발견. 경로 정규화 및 제외 규칙 담당.
+- scanner: .c/.h 및 Rte_*.h 파일 발견. 경로 정규화 및 포함/제외 범위 가지치기 담당.
 - parser: tree-sitter-c 구문 트리에서 함수 정의, 호출, 분기와 진단 추출.
 - models.py: SourceRange, FunctionDefinition, FunctionCall, Branch, ParseDiagnostic.
 - rte.py: 별도의 RteAccess, RteDataDependency, RteHeaderApi 및 후보 분석 결과.
 - storage: 분석 결과와 탐색 세션의 영속화. 원본 C 소스와 분리.
 - rte: RTE 헤더와 명시적 Read/Write 접근을 분석하여 이름 기반 데이터 연결 후보 기록.
 - trace: 최초 목표 분기, 탐색 단계, 조사 이유 관리.
-- workbench: 일관된 소스 바이트 스냅샷, 화면 상태와 조사·저장 액션.
+- workbench: 입력 예산 내 선택 범위 스냅샷, 함수·호출·RTE 조회 인덱스와 검색 페이지, 조사·저장 액션.
 - gui: Tkinter 화면. 워커 분석과 메인 스레드 위젯 갱신을 분리하며 파싱 로직을 포함하지 않음.
 
 FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDataDependency는
@@ -32,6 +32,7 @@ FunctionCall은 호출 지점과 호출 대상 표현식을 기록한다. RteDat
 5. 사용자 승인에 따른 Trace Manager·SQLite 세션 저장 및 복원(완료).
 6. 이름 기반 RTE Resolver와 Trace/SQLite 통합 검증(완료).
 7. Tkinter GUI와 실제 위젯·클릭 검증(완료).
+8. 선택 범위 분석·검색 중심 GUI와 표시 상한 검증(완료). 증분 캐시는 후속 범위.
 
 현재 패키지 버전과 환경 검증, test/ 가상 AUTOSAR 샘플, 샘플 구조·실행 검증,
 scanner.py의 SourceFile/scan_sources 및 parser.py의 parse_file/parse_source API가 존재한다.

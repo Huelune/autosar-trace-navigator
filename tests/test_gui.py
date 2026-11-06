@@ -11,6 +11,7 @@ import unittest
 from unittest.mock import patch
 
 from autosar_trace_navigator.gui import Navigator
+from autosar_trace_navigator.workbench import analyze_project
 from test_workbench import sample_workbench
 
 
@@ -22,6 +23,7 @@ class GuiTests(unittest.TestCase):
         self.root = tk.Tk()
         self.root.withdraw()
         self.app = Navigator(self.root, sample_workbench())
+        self.app.scopes.set(".")
         self.root.update_idletasks()
 
     def tearDown(self):
@@ -36,6 +38,69 @@ class GuiTests(unittest.TestCase):
         self.assertIn("void BrakeControl_10ms", self.app.source.get("1.0", "end"))
         self.assertTrue(self.app.calls.get_children())
         self.assertFalse(self.app.rte.get_children())
+
+    def test_function_list_is_search_driven_and_keeps_current_function(self):
+        current = self.app.workbench.manager.current_step.function
+        self.assertEqual(self.app.functions.get_children(), (current.id,))
+        self.app.query.set("SpeedSignal.c")
+        self.app.search_functions()
+        self.assertEqual(len(self.app.functions.get_children()), 4)  # Three matches and current.
+        self.assertTrue(self.app.functions.exists(current.id))
+        self.app.query.set("no_matching_function")
+        self.app.search_functions()
+        self.assertEqual(self.app.functions.get_children(), (current.id,))
+        self.assertIn("0개 일치", self.app.search_summary.get())
+        self.assertEqual(self.app.workbench.session.target_branch.location.start_line, 10)
+
+    def test_large_function_search_renders_only_page_and_current_pin(self):
+        build = ROOT / "build"
+        build.mkdir(exist_ok=True)
+        with tempfile.TemporaryDirectory(dir=build) as directory:
+            path = Path(directory) / "large.c"
+            path.write_text("\n".join(f"int Fn{i:03}(void) {{ if (1) return 1; else return 0; }}"
+                                      for i in range(550)), encoding="utf-8")
+            project = analyze_project(directory, include_paths=("large.c",))
+            self.app.workbench.project = project
+            self.app.workbench.start(project.functions[0].id, project.results[0].branches[0].id, "범위 테스트")
+            self.app.render_project()
+            self.app.refresh_trace()
+            self.assertEqual(len(self.app.functions.get_children()), 1)
+            self.app.query.set("fn")
+            self.app.search_functions()
+            self.assertEqual(len(self.app.functions.get_children()), 100)
+            self.app.change_page(100)
+            self.assertEqual(len(self.app.functions.get_children()), 101)
+            self.assertTrue(self.app.functions.exists(project.functions[0].id))
+            self.app.query.set("fn549")
+            self.app.change_page(100)  # Changed query restarts pagination.
+            self.assertEqual(self.app.page_offset, 0)
+            self.assertEqual(len(self.app.functions.get_children()), 2)
+            self.assertEqual(self.app.workbench.session.target_function.name, "Fn000")
+
+    def test_root_selection_does_not_analyze_and_blank_scope_is_rejected(self):
+        before = self.app.workbench.project
+        with patch("autosar_trace_navigator.gui.filedialog.askdirectory", return_value=str(ROOT)), \
+                patch.object(self.app.executor, "submit") as submit:
+            self.app.choose_project()
+            submit.assert_not_called()
+            self.app.scopes.set("")
+            with self.assertRaises(ValueError):
+                self.app.begin_analysis(ROOT)
+            submit.assert_not_called()
+        self.assertFalse(self.app.busy)
+        self.assertIs(self.app.workbench.project, before)
+
+    def test_compact_layout_keeps_scope_search_and_start_accessible(self):
+        self.root.geometry("1100x760")
+        self.root.deiconify()
+        self.root.update()
+        for widget in (self.app.scope_entry, self.app.exclude_entry,
+                       *(b for b in self.app.buttons if b.cget("text") in
+                         {"검색", "이전", "다음", "선택 분기로 새 조사 시작"})):
+            with self.subTest(widget=widget):
+                self.assertTrue(widget.winfo_ismapped())
+                self.assertLessEqual(widget.winfo_rooty() + widget.winfo_height(),
+                                     self.root.winfo_rooty() + self.root.winfo_height())
 
     def test_follow_button_preserves_target_and_back_keeps_history(self):
         goal = self.app.goal.get()

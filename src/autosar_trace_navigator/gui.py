@@ -3,6 +3,7 @@
 from concurrent.futures import Future, ThreadPoolExecutor
 from collections.abc import Callable
 from pathlib import Path
+from itertools import chain, islice
 import sqlite3
 import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
@@ -61,6 +62,8 @@ class Navigator(ttk.Frame):
         self.closed = False
         self.reanalyzed = False
         self.poll_id: str | None = None
+        self.page_offset = 0
+        self.last_query = ""
         self.pack(fill="both", expand=True)
         root.title("AUTOSAR Trace Navigator")
         root.geometry("1500x950")
@@ -69,12 +72,23 @@ class Navigator(ttk.Frame):
         self.buttons = []
         toolbar = ttk.Frame(self)
         toolbar.pack(fill="x")
-        for label, command in (("소스 폴더 분석", self.choose_project), ("세션 저장", self.save),
+        for label, command in (("루트 폴더 선택", self.choose_project), ("선택 범위 분석", self.analyze_scope), ("세션 저장", self.save),
                                ("세션 불러오기", self.restore), ("뒤로", self.back)):
             self.button(toolbar, label, command).pack(side="left", padx=(0, 6))
         self.status = tk.StringVar(value="소스 폴더를 선택하세요. 원본 소스는 읽기 전용입니다.")
         status_label = ttk.Label(self, textvariable=self.status, wraplength=1400)
         status_label.pack(fill="x", pady=5)
+        self.project_root = tk.StringVar(value=str(self.workbench.project.root) if self.workbench.project else "미선택")
+        ttk.Label(self, textvariable=self.project_root).pack(fill="x")
+        scope = ttk.Frame(self)
+        scope.pack(fill="x")
+        ttk.Label(scope, text="분석 범위 (루트 기준 파일/폴더, ;로 구분)").pack(side="left")
+        self.scopes = tk.StringVar()
+        self.scope_entry = ttk.Entry(scope, textvariable=self.scopes)
+        self.scope_entry.pack(side="left", fill="x", expand=True, padx=8)
+        self.scope_info = tk.StringVar(value="분석 범위를 지정하세요. 전체 루트는 . 을 명시해야 합니다.")
+        scope_label = ttk.Label(self, textvariable=self.scope_info, wraplength=1400)
+        scope_label.pack(fill="x")
         exclude = ttk.Frame(self)
         exclude.pack(fill="x")
         ttk.Label(exclude, text="제외 경로 (선택 폴더 기준, ;로 구분)").pack(side="left")
@@ -89,7 +103,7 @@ class Navigator(ttk.Frame):
         context_label.pack(fill="x", pady=(0, 6))
         def resize_labels(event) -> None:
             if event.widget == self.root:
-                for label in (status_label, goal_label, context_label):
+                for label in (status_label, scope_label, goal_label, context_label):
                     label.configure(wraplength=max(400, event.width - 24))
         root.bind("<Configure>", resize_labels)
         pane = ttk.Panedwindow(self, orient="horizontal")
@@ -98,8 +112,21 @@ class Navigator(ttk.Frame):
         pane.add(left, weight=2)
         pane.add(middle, weight=4)
         pane.add(right, weight=3)
-        ttk.Label(left, text="함수 목록 — 선택하면 분기와 소스 표시").pack(anchor="w")
-        self.functions = _tree(left, ("함수", "파일:행"), 12)
+        ttk.Label(left, text="함수 검색 — 이름·파일 경로, 결과 100개/페이지").pack(anchor="w")
+        search = ttk.Frame(left)
+        search.pack(fill="x")
+        self.query = tk.StringVar()
+        entry = ttk.Entry(search, textvariable=self.query)
+        entry.pack(side="left", fill="x", expand=True)
+        entry.bind("<Return>", lambda event: self.run_action(self.search_functions))
+        self.button(search, "검색", self.search_functions).pack(side="left")
+        navigation = ttk.Frame(left)
+        navigation.pack(fill="x")
+        self.button(navigation, "이전", lambda: self.change_page(-100)).pack(side="left")
+        self.button(navigation, "다음", lambda: self.change_page(100)).pack(side="left")
+        self.search_summary = tk.StringVar(value="검색어를 입력하세요.")
+        ttk.Label(left, textvariable=self.search_summary, wraplength=300).pack(fill="x")
+        self.functions = _tree(left, ("함수", "파일:행"), 9)
         self.functions.bind("<<TreeviewSelect>>", self.browse_function)
         ttk.Label(left, text="목표 분기 선택").pack(anchor="w", pady=(8, 0))
         self.branches = _tree(left, ("분기", "조건 / 행"), 7)
@@ -152,18 +179,28 @@ class Navigator(ttk.Frame):
     def choose_project(self) -> None:
         directory = filedialog.askdirectory(parent=self.root, title="C/H 소스 폴더 선택")
         if directory:
-            self.begin_analysis(Path(directory))
+            self.project_root.set(directory)
+            self.status.set("루트를 선택했습니다. 분석 범위를 입력하고 선택 범위 분석을 누르세요.")
+
+    def analyze_scope(self) -> None:
+        if self.project_root.get() == "미선택":
+            raise ValueError("먼저 루트 폴더를 선택하세요.")
+        self.begin_analysis(Path(self.project_root.get()))
 
     def begin_analysis(self, directory: Path) -> None:
         if self.busy:
             raise ValueError("분석이 이미 진행 중입니다.")
+        includes = tuple(value.strip() for value in self.scopes.get().split(";") if value.strip())
+        if not includes:
+            raise ValueError("분석 범위에 파일 또는 하위 폴더를 입력하세요. 전체 루트는 . 을 명시하세요.")
         excludes = tuple(value.strip() for value in self.exclusions.get().split(";") if value.strip())
         self.busy = True
         for button in self.buttons:
             button.state(["disabled"])
         self.exclude_entry.state(["disabled"])
+        self.scope_entry.state(["disabled"])
         self.status.set(f"분석 중: {directory} — 기존 조사 상태는 유지됩니다.")
-        self.future = self.executor.submit(analyze_project, directory, exclude_paths=excludes)
+        self.future = self.executor.submit(analyze_project, directory, exclude_paths=excludes, include_paths=includes)
         self.poll_id = self.root.after(80, self.poll_analysis)
 
     def poll_analysis(self) -> None:
@@ -189,6 +226,7 @@ class Navigator(ttk.Frame):
             for button in self.buttons:
                 button.state(["!disabled"])
             self.exclude_entry.state(["!disabled"])
+            self.scope_entry.state(["!disabled"])
 
     def render_project(self) -> None:
         self.functions.delete(*self.functions.get_children())
@@ -198,13 +236,54 @@ class Navigator(ttk.Frame):
         project = self.workbench.project
         if project is None:
             return
-        for function in project.functions:
+        self.project_root.set(str(project.root))
+        scopes = project.scope or (project.root,)
+        self.scope_info.set(f"현재 분석 루트: {project.root} | 범위: " + "; ".join(str(path.relative_to(project.root)) for path in scopes)
+                            + " | 미확인은 이 범위 안의 결과입니다.")
+        self.render_function_page()
+        total = sum(len(result.diagnostics) for result in project.results) + len(project.rte.diagnostics)
+        diagnostics = chain(*(result.diagnostics for result in project.results), project.rte.diagnostics)
+        _set_text(self.diagnostics, f"현재 범위 진단 {total}개 중 최대 500개 표시\n\n" + "\n".join(
+            f"{d.location.path}:{d.location.start_line}\n{d.code}: {d.message}\n" for d in islice(diagnostics, 500)))
+
+    def render_function_page(self, offset: int = 0) -> None:
+        selected = self.functions.selection()
+        self.functions.delete(*self.functions.get_children())
+        self.branches.delete(*self.branches.get_children())
+        project = self.workbench.project
+        self.page_offset = offset
+        if project is None:
+            return
+        self.last_query = self.query.get()
+        page = project.search_functions(self.last_query, offset=offset)
+        for function in page.functions:
             self.functions.insert("", "end", iid=function.id, values=(
                 function.name, f"{function.location.path.relative_to(project.root)}:{function.location.start_line}"))
-        diagnostics = [d for r in project.results for d in r.diagnostics] + list(project.rte.diagnostics)
-        _set_text(self.diagnostics, "\n".join(
-            f"{d.location.path}:{d.location.start_line}\n{d.code}: {d.message}\n" for d in diagnostics)
-            or "진단 없음")
+        manager = self.workbench.manager
+        current = manager.current_step.function if manager else None
+        if current and project.functions_by_id.get(current.id) == current and not self.functions.exists(current.id):
+            self.functions.insert("", "end", iid=current.id, values=(
+                "[현재] " + current.name, f"{current.location.path.relative_to(project.root)}:{current.location.start_line}"))
+        self.search_summary.set(
+            f"{offset + 1 if page.functions else 0}–{offset + len(page.functions)} / {page.total}개 일치 (현재 함수 별도 유지)"
+            if self.last_query.strip() else "검색어를 입력하세요. 전체 함수는 자동 표시하지 않습니다.")
+        if selected and self.functions.exists(selected[0]):
+            self.functions.selection_set(selected[0])
+            self.browse_function()
+
+    def search_functions(self) -> None:
+        self.render_function_page()
+
+    def change_page(self, delta: int) -> None:
+        if self.workbench.project is None:
+            return
+        if self.query.get() != self.last_query:
+            self.search_functions()
+            return
+        offset = max(0, self.page_offset + delta)
+        page = self.workbench.project.search_functions(self.query.get(), offset=offset)
+        if offset == 0 or page.functions:
+            self.render_function_page(offset)
 
     def browse_function(self, event: tk.Event | None = None) -> None:
         selected = self.functions.selection()
@@ -274,12 +353,13 @@ class Navigator(ttk.Frame):
             table = self.calls if candidate.relation == "call" else self.rte
             destination = candidate.function
             label = (f"{destination.name} — {destination.location.path.name}:{destination.location.start_line}"
-                     if destination else "함수 미확인 — 이동 불가")
+                     if destination else "현재 분석 범위에서 미확인 — 이동 불가")
             table.insert("", "end", iid=key, values=(candidate.label, label))
         for step in manager.session.steps:
             marker = "▶ " if step.id == manager.session.current_step_id else ""
             self.history.insert("", "end", iid=step.id, values=(marker + step.relation, step.function.name, step.reason))
         current = manager.current_step.function
+        self.render_function_page(self.page_offset)
         if self.functions.exists(current.id):
             self.functions.selection_set(current.id)
             self.functions.see(current.id)
