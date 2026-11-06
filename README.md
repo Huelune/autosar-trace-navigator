@@ -77,8 +77,14 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 84개와
-C 시나리오 12개 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 93개와
+C 시나리오 204개(기존 12개 + 확장 192개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+
+## 확장 C 프로젝트
+
+[test/large_autosar](test/large_autosar/README.md)에 24 SWC의 C/H 171개,
+함수 정의 424개·분기 665개를 추가했습니다. GUI 루트를 해당 폴더로 선택하고
+`swc/Brake_000;shared`부터 조사할 수 있습니다. [시나리오·변형 생성 방법](docs/large-sample.md)을 참고하세요.
 
 ## RTE 후보 분석
 
