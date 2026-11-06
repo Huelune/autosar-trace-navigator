@@ -37,12 +37,15 @@ def scan_sources(
     root: str | os.PathLike[str],
     *,
     exclude_paths: Iterable[str | os.PathLike[str]] = (),
+    include_paths: Iterable[str | os.PathLike[str]] = (),
 ) -> tuple[SourceFile, ...]:
     """Find .c/.h files recursively without reading or changing their contents.
 
     Exclusions are literal files/directories, not globs. Relative exclusions are
     interpreted against root, and exclusions outside root are rejected. There
-    are no implicit exclusions. Results have a stable relative POSIX-path order.
+    are no implicit exclusions. Optional literal include paths restrict discovery;
+    unselected directories are pruned before entering them. Empty includes mean
+    the whole root for compatibility. Results have a stable relative POSIX-path order.
     Directory symlinks/junctions and file symlinks are skipped. An explicitly
     supplied root is resolved first. Filesystem errors propagate instead of
     returning a misleading partial result.
@@ -64,6 +67,20 @@ def scan_sources(
     def is_excluded(path: Path) -> bool:
         return any(path.is_relative_to(item) for item in excluded)
 
+    included = []
+    for item in include_paths:
+        candidate = Path(item)
+        if not candidate.is_absolute():
+            candidate = base / candidate
+        candidate = candidate.resolve(strict=True)
+        if not candidate.is_relative_to(base):
+            raise ValueError(f"Included path must be inside scan root: {candidate}")
+        included.append(candidate)
+
+    def is_selected(path: Path, *, directory: bool = False) -> bool:
+        return not included or any(path.is_relative_to(item) or
+                                   (directory and item.is_relative_to(path)) for item in included)
+
     if is_excluded(base):
         return ()
 
@@ -74,13 +91,14 @@ def scan_sources(
         parent = Path(directory)
         directories[:] = sorted(
             name for name in directories
-            if not _is_link(parent / name) and not is_excluded(parent / name)
+            if is_selected(parent / name, directory=True)
+            and not is_excluded(parent / name) and not _is_link(parent / name)
         )
         for name in filenames:
             path = parent / name
             if path.suffix.lower() not in {".c", ".h"}:
                 continue
-            if _is_link(path) or is_excluded(path):
+            if not is_selected(path) or is_excluded(path) or _is_link(path):
                 continue
             # stat errors (including files removed during discovery) propagate.
             if stat.S_ISREG(path.stat().st_mode):

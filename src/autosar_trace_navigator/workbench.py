@@ -1,12 +1,15 @@
 """UI-independent project snapshots and investigation actions."""
 
 from dataclasses import dataclass
+from functools import cached_property
 from pathlib import Path
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
+from collections import defaultdict
+from types import MappingProxyType
 
-from .models import FunctionDefinition, ParseResult, SourceRange
+from .models import FunctionCall, FunctionDefinition, ParseResult, SourceRange
 from .parser import parse_source
-from .rte import RteResolution, inspect_rte_header, resolve_rte
+from .rte import RteAccess, RteDataDependency, RteResolution, inspect_rte_header, resolve_rte
 from .scanner import scan_sources
 from .storage import TraceStore
 from .trace import TraceManager, TraceSession
@@ -18,10 +21,72 @@ class ProjectSnapshot:
     sources: tuple[tuple[Path, bytes], ...]
     results: tuple[ParseResult, ...]
     rte: RteResolution
+    scope: tuple[Path, ...] = ()
 
-    @property
+    @cached_property
     def functions(self) -> tuple[FunctionDefinition, ...]:
         return tuple(function for result in self.results for function in result.functions)
+
+    @cached_property
+    def functions_by_id(self) -> Mapping[str, FunctionDefinition]:
+        return MappingProxyType({function.id: function for function in self.functions})
+
+    @cached_property
+    def functions_by_name(self) -> Mapping[str, tuple[FunctionDefinition, ...]]:
+        index = defaultdict(list)
+        for function in self.functions:
+            index[function.name].append(function)
+        return MappingProxyType({name: tuple(items) for name, items in index.items()})
+
+    @cached_property
+    def calls_by_owner(self) -> Mapping[str | None, tuple[FunctionCall, ...]]:
+        index = defaultdict(list)
+        for result in self.results:
+            for call in result.calls:
+                index[call.caller_id].append(call)
+        return MappingProxyType({owner: tuple(items) for owner, items in index.items()})
+
+    @cached_property
+    def rte_by_owner(self) -> Mapping[str | None, tuple[tuple[RteAccess, RteDataDependency], ...]]:
+        by_id = {access.id: access for access in self.rte.accesses}
+        index = defaultdict(list)
+        for dependency in self.rte.dependencies:
+            read = by_id[dependency.consumer_access_id]
+            write = by_id[dependency.producer_access_id]
+            index[read.function_id].append((write, dependency))
+        return MappingProxyType({owner: tuple(items) for owner, items in index.items()})
+
+    @cached_property
+    def search_index(self) -> tuple[tuple[FunctionDefinition, str], ...]:
+        return tuple((function, f"{function.name} {function.location.path.relative_to(self.root).as_posix()}".casefold())
+                     for function in self.functions)
+
+    def search_functions(self, query: str, *, offset: int = 0, limit: int = 100) -> "FunctionPage":
+        """Explicit token search by name/path; never materialize all matching rows."""
+        if type(offset) is not int or offset < 0 or type(limit) is not int or not 1 <= limit <= 500:
+            raise ValueError("Invalid search page: offset >= 0 and 1 <= limit <= 500 required")
+        tokens = query.casefold().split()
+        matches = []
+        total = 0
+        if tokens:
+            for function, searchable in self.search_index:
+                if all(token in searchable for token in tokens):
+                    if offset <= total < offset + limit:
+                        matches.append(function)
+                    total += 1
+        return FunctionPage(tuple(matches), total, offset, limit)
+
+
+@dataclass(frozen=True)
+class FunctionPage:
+    functions: tuple[FunctionDefinition, ...]
+    total: int
+    offset: int
+    limit: int
+
+
+class AnalysisLimitError(ValueError):
+    """The chosen scope exceeds an explicit workload budget; no partial result returned."""
 
 
 @dataclass(frozen=True)
@@ -33,15 +98,34 @@ class InvestigationCandidate:
     uncertainty: tuple[str, ...]
 
 
-def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = ()) -> ProjectSnapshot:
+def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = (),
+                    include_paths: Iterable[str | Path] = (), max_files: int = 500,
+                    max_source_bytes: int = 32 * 1024 * 1024,
+                    max_file_bytes: int = 4 * 1024 * 1024) -> ProjectSnapshot:
     """Read each source once so parser, header inspector and preview use the same bytes."""
     base = Path(root).resolve(strict=True)
-    sources = scan_sources(base, exclude_paths=exclude_paths)
-    snapshots = tuple((source.path, source.path.read_bytes()) for source in sources)
+    if any(type(value) is not int or value < 1 for value in (max_files, max_source_bytes, max_file_bytes)):
+        raise ValueError("Analysis budgets must be positive integers")
+    includes = tuple(include_paths)
+    sources = scan_sources(base, exclude_paths=exclude_paths, include_paths=includes)
+    if len(sources) > max_files:
+        raise AnalysisLimitError(f"선택 범위에 파일 {len(sources)}개: 제한 {max_files}개. 분석 범위를 줄이세요.")
+    snapshots = []
+    size = 0
+    for source in sources:
+        remaining = min(max_file_bytes, max_source_bytes - size)
+        with source.path.open("rb") as stream:
+            data = stream.read(remaining + 1)
+        if len(data) > remaining:
+            raise AnalysisLimitError("선택 범위의 소스 크기 제한을 초과했습니다. 분석 범위를 줄이세요.")
+        size += len(data)
+        snapshots.append((source.path, data))
+    snapshots = tuple(snapshots)
     results = tuple(parse_source(data, path=path) for path, data in snapshots)
     rte_paths = {source.path for source in sources if source.is_rte_header}
     headers = tuple(inspect_rte_header(data, path=path) for path, data in snapshots if path in rte_paths)
-    return ProjectSnapshot(base, snapshots, results, resolve_rte(results, headers=headers))
+    scope = tuple(sorted({(base / path).resolve() for path in includes}, key=lambda p: p.as_posix())) or (base,)
+    return ProjectSnapshot(base, snapshots, results, resolve_rte(results, headers=headers), scope)
 
 
 class Workbench:
@@ -79,31 +163,23 @@ class Workbench:
         if self.manager is None or self.project is None:
             return ()
         current = self.manager.current_step.function
-        if current not in self.project.functions:
+        if self.project.functions_by_id.get(current.id) != current:
             return ()
         candidates = []
-        for result in self.project.results:
-            for call in result.calls:
-                if call.caller_id != current.id:
-                    continue
-                matches = [f for f in self.project.functions if f.name == call.callee_name]
-                if call.kind != "direct_candidate":
-                    matches = []
-                reasons = (*call.uncertainty, "name_only_call_candidate")
-                if len(matches) > 1:
-                    reasons += ("multiple_function_candidates",)
-                for function in matches or [None]:
-                    candidates.append(InvestigationCandidate(
-                        function, call.callee_expression, "call", call.location, reasons))
-        by_id = {access.id: access for access in self.project.rte.accesses}
-        by_function = {function.id: function for function in self.project.functions}
-        for dependency in self.project.rte.dependencies:
-            read = by_id[dependency.consumer_access_id]
-            if read.function_id == current.id:
-                write = by_id[dependency.producer_access_id]
+        for call in self.project.calls_by_owner.get(current.id, ()):
+            matches = self.project.functions_by_name.get(call.callee_name, ()) if call.kind == "direct_candidate" else ()
+            reasons = (*call.uncertainty, "name_only_call_candidate")
+            if not matches:
+                reasons += ("not_resolved_in_analysis_scope",)
+            if len(matches) > 1:
+                reasons += ("multiple_function_candidates",)
+            for function in matches or [None]:
                 candidates.append(InvestigationCandidate(
-                    by_function.get(write.function_id), dependency.channel, "rte_data",
-                    write.location, dependency.uncertainty))
+                    function, call.callee_expression, "call", call.location, reasons))
+        for write, dependency in self.project.rte_by_owner.get(current.id, ()):
+            candidates.append(InvestigationCandidate(
+                self.project.functions_by_id.get(write.function_id), dependency.channel, "rte_data",
+                write.location, dependency.uncertainty))
         return tuple(candidates)
 
     def follow(self, candidate: InvestigationCandidate, reason: str) -> None:
