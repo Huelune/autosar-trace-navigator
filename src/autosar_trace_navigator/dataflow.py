@@ -100,7 +100,7 @@ class ValueResolver:
             if expression.type == "identifier":
                 add(owner, kind, original, site, ValueProbe(owner, expression.text.decode(), point), extra)
             elif expression.type in {"number_literal", "char_literal", "string_literal", "true", "false", "null"}:
-                add(owner, "constant", original, site, extra=(*extra, "constant_not_a_test_input"))
+                add(owner, "constant", original, site, extra=(*extra, "constant_source_not_constraint_solution"))
             elif expression.type == "call_expression":
                 callee = expression.child_by_field_name("function")
                 name = callee.text.decode() if callee is not None and callee.type == "identifier" else None

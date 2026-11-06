@@ -7,7 +7,8 @@ from collections.abc import Iterable, Mapping
 from collections import defaultdict
 from types import MappingProxyType
 
-from .models import FunctionCall, FunctionDefinition, ParseResult, SourceRange
+from .models import FunctionCall, FunctionDefinition, ParseResult, SourceRange, ValueProbe
+from .dataflow import ValueResolver
 from .parser import parse_source
 from .rte import RteAccess, RteDataDependency, RteResolution, inspect_rte_header, resolve_rte
 from .scanner import scan_sources
@@ -22,6 +23,10 @@ class ProjectSnapshot:
     results: tuple[ParseResult, ...]
     rte: RteResolution
     scope: tuple[Path, ...] = ()
+
+    @cached_property
+    def value_resolver(self) -> ValueResolver:
+        return ValueResolver(self)
 
     @cached_property
     def functions(self) -> tuple[FunctionDefinition, ...]:
@@ -96,6 +101,9 @@ class InvestigationCandidate:
     relation: str
     evidence: SourceRange
     uncertainty: tuple[str, ...]
+    probe: ValueProbe | None = None
+    selected_location: SourceRange | None = None
+    value_kind: str | None = None
 
 
 def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = (),
@@ -183,10 +191,41 @@ class Workbench:
         return tuple(candidates)
 
     def follow(self, candidate: InvestigationCandidate, reason: str) -> None:
-        if self.manager is None or candidate not in self.candidates() or candidate.function is None:
+        if (self.manager is None or candidate.function is None
+                or candidate not in (*self.candidates(), *self.value_candidates())):
             raise ValueError("조사할 함수가 확인되지 않았거나 현재 단계의 후보가 아닙니다.")
         self.manager.follow(candidate.function, reason=reason, relation=candidate.relation,
-                            evidence=candidate.evidence, uncertainty=candidate.uncertainty)
+                            evidence=candidate.evidence, uncertainty=candidate.uncertainty,
+                            probe=candidate.probe, selected_location=candidate.selected_location)
+        self.dirty = True
+
+    def value_candidates(self) -> tuple[InvestigationCandidate, ...]:
+        if self.manager is None or self.project is None or self.manager.current_step.probe is None:
+            return ()
+        step = self.manager.current_step
+        if self.project.functions_by_id.get(step.function.id) != step.function:
+            return ()
+        sources = self.project.value_resolver.sources(step.probe)
+        return tuple(InvestigationCandidate(
+            self.project.functions_by_id.get(source.function_id), f"{source.kind}: {source.expression}",
+            "rte_data" if "name_only_connection" in source.uncertainty else "value", source.location,
+            source.uncertainty, source.next_probe,
+            source.next_probe.location if source.next_probe else source.location, source.kind)
+            for source in sources)
+
+    def set_variable_goal(self, variable: str, target_value: str, location: SourceRange) -> None:
+        self.session
+        self.manager.set_variable_goal(variable, target_value, location)
+        self.dirty = True
+
+    def inspect_variable(self, variable: str, location: SourceRange) -> None:
+        self.session
+        self.manager.inspect_variable(variable, location)
+        self.dirty = True
+
+    def record_location(self, location: SourceRange) -> None:
+        self.session
+        self.manager.record_location(location)
         self.dirty = True
 
     def back(self) -> None:

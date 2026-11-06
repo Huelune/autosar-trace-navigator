@@ -7,8 +7,8 @@ from pathlib import Path
 import sqlite3
 from types import TracebackType
 
-from .models import Branch, FunctionDefinition, SourceRange
-from .trace import TraceSession, TraceStep, validate_session
+from .models import Branch, FunctionDefinition, SourceRange, ValueProbe
+from .trace import TraceSession, TraceStep, VariableGoal, validate_session
 
 
 APPLICATION_ID = 0x41544E56
@@ -44,6 +44,9 @@ def _decode(payload: str) -> TraceSession:
 
     try:
         data = json.loads(payload)
+        version = data.pop("format_version", 1)
+        if type(version) is not int or version not in {1, 2}:
+            raise ValueError("Unsupported trace snapshot format")
         target = data["target_branch"]
         branch = Branch(**{
             **target, "location": span(target["location"]),
@@ -54,9 +57,14 @@ def _decode(payload: str) -> TraceSession:
             **step, "function": function(step["function"]),
             "evidence": span(step["evidence"]) if step["evidence"] is not None else None,
             "uncertainty": tuple(step["uncertainty"]),
+            "selected_location": span(step["selected_location"]) if step.get("selected_location") else None,
+            "probe": ValueProbe(**{**step["probe"], "location": span(step["probe"]["location"])})
+                     if step.get("probe") else None,
         }) for step in data["steps"])
+        goal = data.get("variable_goal")
         session = TraceSession(**{**data, "target_function": function(data["target_function"]),
-                                  "target_branch": branch, "steps": steps})
+                                  "target_branch": branch, "steps": steps,
+                                  "variable_goal": VariableGoal(**{**goal, "location": span(goal["location"])}) if goal else None})
         validate_session(session)
         return session
     except (ValueError, TypeError, KeyError, AttributeError) as error:
@@ -115,7 +123,7 @@ class TraceStore:
         validate_session(session)
         if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 1):
             raise ValueError("Expected revision must be a positive integer")
-        payload = json.dumps(asdict(session), default=_encode_path, ensure_ascii=False)
+        payload = json.dumps({"format_version": 2, **asdict(session)}, default=_encode_path, ensure_ascii=False)
         revision = 1 if expected_revision is None else expected_revision + 1
         with self._connection:
             if expected_revision is None:

@@ -41,3 +41,23 @@ IsAssistRequested: pedal >= 60u
 조건 `(eligible == 1) && (pedal >= 60u)`에서 실제 목표 도달을 위한 기존 샘플 입력은
 TestPlatform_Reset(300u, 60u, E_OK, E_OK) 후 공급자→소비자 순서 실행이다.
 자동 테스트는 이 설정의 실행과 역추적 후보 경로를 각각 검증한다.
+
+## 목표와 이력 저장
+
+Workbench.set_variable_goal(variable, target_value, location)는 현재 조사 함수에
+첫 변수 목표를 고정한다. 최초 분기와 이 목표는 이동·뒤로 가기·저장 후 복원에도 유지된다.
+다른 변수 목표는 새 조사로 시작한다. inspect_variable(variable, location)는 최초 목표를
+바꾸지 않고 현재 단계의 조사 변수만 바꾼다.
+
+value_candidates()는 선택한 함수에서 필요한 값 출처를 제공한다. 후보를 follow하면
+다음 함수/변수 또는 반환값 probe로 이어진다. 상수·미지원 식 같은 종점 후보로
+이동하면 그 코드 위치를 기록하고 자동 값 추적은 멈춘다. 수식이나 조건이 풀린 것은 아니다.
+
+각 TraceStep의 selected_location은 해당 함수 안에서 선택한 위치이고 evidence는
+그 단계로 이동하게 된 공급/호출 근거다. 루트 단계는 최초 분기 위치를 기록한다.
+record_location(location)은 사용자가 명시적으로 선택한 위치만 현재 단계에 반영한다.
+미리보기·단순 코드 열람은 이 메서드를 호출하지 않아야 한다.
+
+JSON 스냅샷 형식 2는 변수 목표, 단계별 probe와 선택 위치를 보존한다.
+SQLite 테이블 버전은 그대로이며 이전 형식 1도 읽는다. 이전 기록에 없던 선택 위치는
+None(미기록)으로 복원하고 임의로 추정하지 않는다. 구버전 앱의 새 스냅샷 읽기는 보장하지 않는다.
