@@ -272,7 +272,8 @@ class GuiTests(unittest.TestCase):
         self.assertEqual(step.selected_location, candidate.selected_location)
         self.assertEqual(self.app.workbench.session.variable_goal, goal)
         self.assertIn("현재 값 조사: pedal", self.app.context.get())
-        self.assertIn(f":{candidate.selected_location.start_line}", self.app.history.item(step.id, "values")[2])
+        self.assertTrue(self.app.history.item(step.id, "values")[2].startswith(
+            f"{candidate.selected_location.start_line}행"))
 
     def test_selected_line_and_history_preview_are_explicit_and_return_to_recorded_line(self):
         self.use_pedal_goal()
@@ -379,6 +380,59 @@ class GuiTests(unittest.TestCase):
         self.app.preview_history()
         self.assertIn("일치하지 않아", self.app.candidate_source.get("1.0", "end"))
         self.assertEqual(self.app.workbench.session, before)
+
+    def test_location_labels_show_actual_line_before_long_function_or_path(self):
+        self.use_pedal_goal()
+        step = self.app.workbench.manager.current_step
+        self.assertTrue(self.app.history.item(step.id, "values")[2].startswith("16행"))
+        key = next(key for key, c in self.app.candidate_map.items() if c.value_kind == "rte_data")
+        candidate = self.app.candidate_map[key]
+        self.assertNotEqual(candidate.selected_location.start_line, candidate.function.location.start_line)
+        self.assertTrue(self.app.values.item(key, "values")[1].startswith(
+            f"{candidate.selected_location.start_line}행"))
+        self.app.values.selection_set(key)
+        self.app.preview_candidate(self.app.values)
+        self.assertIn(candidate.function.name, self.app.preview_label.get())
+
+    def test_double_click_variable_populates_input_without_mutating_session(self):
+        self.use_pedal_goal()
+        self.root.deiconify()
+        self.root.update()
+        self.app.variable.set("")
+        text = self.app.source.get("16.0", "16.end")
+        column = text.index("pedal") + 1
+        box = self.app.source.bbox(f"16.{column}")
+        self.assertIsNotNone(box)
+        before = self.app.workbench.session
+        for event, timestamp in (("<ButtonPress-1>", 1000), ("<ButtonRelease-1>", 1001),
+                                 ("<ButtonPress-1>", 1100), ("<ButtonRelease-1>", 1101)):
+            self.app.source.event_generate(event, x=box[0] + 1, y=box[1] + 1, time=timestamp)
+        self.root.update()
+        self.assertEqual(self.app.variable.get(), "pedal")
+        self.assertEqual(self.app.workbench.session, before)
+
+    def test_terminal_line_stays_visible_after_preview_and_follow_layout_change(self):
+        self.use_pedal_goal()
+        self.root.deiconify()
+        self.root.update()
+        for kind in ("rte_data", "return_value", "return", "global_write", "constant"):
+            key = next(key for key, c in self.app.candidate_map.items()
+                       if c.value_kind == kind and (kind != "constant" or c.label.endswith("60u")))
+            self.app.values.selection_set(key)
+            self.app.preview_candidate(self.app.values)
+            self.root.update()
+            with patch("autosar_trace_navigator.gui.simpledialog.askstring", return_value="입력 출처"):
+                self.app.follow(self.app.values)
+            self.root.update()
+        location = self.app.workbench.manager.current_step.selected_location
+        box = self.app.source.bbox(f"{location.start_line}.0")
+        self.assertIsNotNone(box)
+        self.assertLessEqual(box[1] + box[3], self.app.source.winfo_height())
+        # A newer user click must win over a still-pending viewport callback.
+        self.app.show_source(location)
+        self.app.pick_source_position("34.12")
+        self.root.update()
+        self.assertEqual(self.app.picked_location.start_line, 34)
 
 
 if __name__ == "__main__":

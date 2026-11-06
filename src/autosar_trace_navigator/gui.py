@@ -67,6 +67,7 @@ class Navigator(ttk.Frame):
         self.closed = False
         self.reanalyzed = False
         self.poll_id: str | None = None
+        self.source_focus_id: str | None = None
         self.page_offset = 0
         self.last_query = ""
         self.picked_location: SourceRange | None = None
@@ -164,6 +165,7 @@ class Navigator(ttk.Frame):
         self.source = _text(source_tab)
         self.source.tag_configure("location", background="#fff0b3", foreground="#111111")
         self.source.bind("<ButtonRelease-1>", self.capture_source_selection)
+        self.source.bind("<Double-Button-1>", self.select_source_identifier)
         self.preview_tab = ttk.Frame(notebook)
         notebook.add(self.preview_tab, text="후보 / 이력 코드")
         self.preview_label = tk.StringVar(value="후보를 선택하면 이동 전에 코드를 확인할 수 있습니다.")
@@ -334,6 +336,9 @@ class Navigator(ttk.Frame):
         self.show_source(location or function.location)
 
     def show_source(self, location: SourceRange) -> None:
+        if self.source_focus_id is not None:
+            self.root.after_cancel(self.source_focus_id)
+            self.source_focus_id = None
         self.source_notebook.select(0)
         project = self.workbench.project
         data = next((data for path, data in project.sources if path == location.path), None) if project else None
@@ -348,6 +353,28 @@ class Navigator(ttk.Frame):
         self.source.tag_remove("location", "1.0", "end")
         self.source.tag_add("location", f"{location.start_line}.0", f"{location.start_line}.end")
         self.source.see(f"{location.start_line}.0")
+        # Switching tabs and wrapping labels changes the viewport after this call.
+        # Apply focus after layout, without overwriting a newer source selection.
+        def focus_after_layout() -> None:
+            self.source_focus_id = None
+            if not self.closed and self.picked_location == location:
+                self.source.yview(f"{max(1, location.start_line - 5)}.0")
+                self.source.see(f"{location.start_line}.0")
+        self.source_focus_id = self.root.after_idle(focus_after_layout)
+
+    def select_source_identifier(self, event: tk.Event) -> str | None:
+        """Use C identifier boundaries; Windows text word selection includes punctuation."""
+        index = self.source.index(f"@{event.x},{event.y}")
+        row, column = (int(value) for value in index.split("."))
+        text = self.source.get(f"{row}.7", f"{row}.end")
+        for match in re.finditer(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_])", text):
+            if match.start() <= column - 7 < match.end():
+                self.source.tag_remove("sel", "1.0", "end")
+                start = f"{row}.{match.start() + 7}"
+                self.source.tag_add("sel", start, f"{row}.{match.end() + 7}")
+                self.pick_source_position(start)
+                return "break"
+        return None
 
     def capture_source_selection(self, event: tk.Event) -> None:
         self.pick_source_position(self.source.index(f"@{event.x},{event.y}"))
@@ -447,13 +474,14 @@ class Navigator(ttk.Frame):
             table = (self.values if candidate.value_kind else
                      self.calls if candidate.relation == "call" else self.rte)
             destination = candidate.function
-            label = (f"{destination.name} — {destination.location.path.name}:{destination.location.start_line}"
+            site = candidate.selected_location or (destination.location if destination else candidate.evidence)
+            label = (f"{site.start_line}행 · {site.path.name} — {destination.name}"
                      if destination else "현재 분석 범위에서 미확인 — 이동 불가")
             table.insert("", "end", iid=key, values=(candidate.label, label))
         for step in manager.session.steps:
             marker = "▶ " if step.id == manager.session.current_step_id else ""
             site = step.selected_location
-            label = f"{site.path}:{site.start_line}" if site else "미기록 (이전 세션)"
+            label = f"{site.start_line}행 · {site.path.name}" if site else "미기록 (이전 세션)"
             self.history.insert("", "end", iid=step.id,
                                 values=(marker + step.relation, step.function.name, label, step.reason))
         current = manager.current_step.function
@@ -478,7 +506,8 @@ class Navigator(ttk.Frame):
     def show_preview(self, function: FunctionDefinition | None, location: SourceRange, heading: str) -> None:
         """Display bounded snapshot code without changing the active selection or session."""
         project = self.workbench.project
-        self.preview_label.set(f"{heading}\n{location.path}:{location.start_line} | 현재 분석 시점")
+        name = function.name if function else "대상 함수 미확인"
+        self.preview_label.set(f"{heading} | {name}\n{location.path}:{location.start_line} | 현재 분석 시점")
         self.source_notebook.select(self.preview_tab)
         if function is not None and (project is None or project.functions_by_id.get(function.id) != function):
             _set_text(self.candidate_source, "저장된 함수와 현재 분석 정보가 일치하지 않아 코드를 표시할 수 없습니다.")
@@ -587,6 +616,9 @@ class Navigator(ttk.Frame):
             self.closed = True
             if self.poll_id is not None:
                 self.root.after_cancel(self.poll_id)
+            if self.source_focus_id is not None:
+                self.root.after_cancel(self.source_focus_id)
+                self.source_focus_id = None
             self.executor.shutdown(wait=False, cancel_futures=True)
             self.root.destroy()
 
