@@ -130,6 +130,14 @@ class ValueResolver:
         return SourceRange(path, node.start_point.row + 1, node.start_point.column + 1,
                            node.end_point.row + 1, node.end_point.column + 1, node.start_byte, node.end_byte)
 
+    def _global_declarations(self, path: Path, name: str) -> tuple[Node, ...]:
+        root = self._root(path)
+        return tuple(n for n in _walk(root) if n.type == "declaration"
+                     and not any(a.type == "function_definition" for a in _ancestors(n, root))
+                     and any(_name(c.child_by_field_name("declarator") if c.type == "init_declarator" else c) == name
+                             for c in n.named_children
+                             if not any(d.type == "function_declarator" for d in _walk(c))))
+
     def branch_inputs(self, branch_id: str) -> tuple[ConditionInput, ...]:
         """List condition inputs without mistaking b.a, p->a or a[i] for plain a."""
         branch = next((b for result in self.project.results for b in result.branches if b.id == branch_id), None)
@@ -140,28 +148,38 @@ class ValueResolver:
         condition = syntax.child_by_field_name("condition")
         inputs = []
 
-        def visit(node: Node) -> None:
-            if node.type == "call_expression":
-                arguments = node.child_by_field_name("arguments")
-                if arguments is not None:
-                    for child in arguments.named_children:
-                        visit(child)
-                return
-            if node.type in {"field_expression", "subscript_expression", "pointer_expression"}:
-                inputs.append(ConditionInput(node.text.decode("utf-8", errors="replace"),
-                                             self._location(branch.location.path, node), False))
-            elif node.type == "identifier":
-                inputs.append(ConditionInput(node.text.decode("utf-8", errors="replace"),
-                                             self._location(branch.location.path, node), True))
-            else:
-                for child in node.named_children:
-                    visit(child)
         if condition is not None:
-            visit(condition)
+            for item in _input_nodes(condition):
+                path = _access(item)
+                inputs.append(ConditionInput(path.expression if path else item.text.decode("utf-8", errors="replace"),
+                                             self._location(branch.location.path, item), path is not None))
         unique = {}
         for item in inputs:
             unique.setdefault(item.expression, item)
         return tuple(unique.values())
+
+    def access_at(self, site: SourceRange) -> ConditionInput | None:
+        """Pick the complete object access under a source cursor, including unsupported arrays."""
+        owner = next((fn for fn in self.project.functions if fn.location.path == site.path
+                      and fn.location.start_byte <= site.start_byte < fn.location.end_byte), None)
+        if owner is None:
+            return None
+        matches = []
+        for node in _walk(self._function(owner.id)):
+            if node.type not in {"identifier", "field_expression", "pointer_expression", "subscript_expression"}:
+                continue
+            if not node.start_byte <= site.start_byte < node.end_byte:
+                continue
+            if node.type == "identifier" and node.parent.type == "call_expression" and node.parent.child_by_field_name("function") == node:
+                continue
+            path = _access(node)
+            if path is not None or node.type in {"field_expression", "subscript_expression"}:
+                matches.append((node, path))
+        if not matches:
+            return None
+        node, path = max(matches, key=lambda item: item[0].end_byte - item[0].start_byte)
+        return ConditionInput(path.expression if path else node.text.decode("utf-8", errors="replace"),
+                              self._location(site.path, node), path is not None)
 
     def conditions(self, site: SourceRange) -> tuple[ExecutionRequirement, ...]:
         """Structural if/else prerequisites, including false preceding arms of a chain."""
@@ -192,19 +210,10 @@ class ValueResolver:
                 if condition is None:
                     continue
                 variables = []
-                for identifier in _walk(condition):
-                    if identifier.type != "identifier":
-                        continue
-                    parent = identifier.parent
-                    if parent.type == "call_expression" and parent.child_by_field_name("function") == identifier:
-                        continue
-                    # Member/pointer outputs are not same-spelled local variable uses.
-                    if any(ancestor.type in {"field_expression", "pointer_expression", "subscript_expression"}
-                           for ancestor in _ancestors(identifier, condition)):
-                        continue
-                    name = identifier.text.decode("utf-8", errors="replace")
-                    if not any(probe.expression == name for probe in variables):
-                        variables.append(ValueProbe(owner.id, name, self._location(site.path, identifier)))
+                for item in _input_nodes(condition):
+                    path = _access(item)
+                    if path is not None and not any(probe.expression == path.expression for probe in variables):
+                        variables.append(ValueProbe(owner.id, path.expression, self._location(site.path, item)))
                 requirements.append(ExecutionRequirement(
                     owner.id, branch.condition, truth, self._location(site.path, condition), tuple(variables),
                     tuple(dict.fromkeys((*owner.uncertainty, *branch.uncertainty, "structural_conditions_only",
@@ -387,13 +396,8 @@ class ValueResolver:
                 for declaration_path in self._bytes:
                     if declaration_path != path and declaration_path.suffix.lower() != ".h":
                         continue
-                    for declaration in self._root(declaration_path).named_children:
-                        if declaration.type == "declaration" and any(
-                            _name(child.child_by_field_name("declarator") if child.type == "init_declarator" else child) == variable
-                            for child in declaration.named_children
-                            if not any(part.type == "function_declarator" for part in _walk(child))
-                        ):
-                            declarations.append((declaration_path, declaration))
+                    declarations.extend((declaration_path, declaration)
+                                        for declaration in self._global_declarations(declaration_path, variable))
                 if declarations and not any(
                     child.type in {"storage_class_specifier", "type_qualifier"} and child.text in {b"static", b"const"}
                     for _, declaration in declarations for child in declaration.named_children
@@ -403,10 +407,7 @@ class ValueResolver:
                         "external_linkage_name_candidate", "ct_accessibility_not_verified",
                         "header_visibility_not_verified", f"declaration: {declaration_path}:{declaration.start_point.row + 1}"))
                 # Deliberately file-local lookup; do not merge same-spelled globals in other files.
-                global_known = any(n.type == "declaration" and n.parent.type != "compound_statement"
-                                   and any(_name(c.child_by_field_name("declarator") if c.type == "init_declarator" else c) == variable
-                                           for c in n.named_children)
-                                   for n in self._root(path).named_children)
+                global_known = bool(self._global_declarations(path, variable))
                 if global_known:
                     for other in self.project.functions:
                         if other.location.path != path or other.id == function.id:

@@ -10,7 +10,8 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .storage import TraceStore
-from .models import FunctionDefinition, SourceRange
+from .models import FunctionDefinition, SourceRange, ValueProbe
+from .access import parse_access_path
 from .workbench import InvestigationCandidate, Workbench, analyze_project
 
 
@@ -21,7 +22,16 @@ _VALUE_LABELS = {
     "unresolved_call": "미해석 호출", "expression": "계산식 (역산 미수행)",
     "constant": "상수", "ct_global_input": "CT 전역 제어 후보",
     "possible_output_argument": "출력 인수 후보", "update": "증감식",
+    "member_write": "멤버/객체 쓰기", "member_initializer": "객체/포인터 초기값",
+    "object_origin": "객체 자체 출처 (멤버값 별도)", "output_parameter": "함수 출력 인수 후보",
+    "member_boundary": "멤버/포인터 해석 경계", "parameter_input": "함수 입력",
 }
+
+
+def _probe_text(probe: ValueProbe | None, default: str = "추적 종점") -> str:
+    if probe is None:
+        return default
+    return probe.expression.replace("$return", "반환값", 1) if probe.kind == "return" else probe.expression
 
 
 def _tree(parent: ttk.Frame, columns: tuple[str, ...], height: int = 8) -> ttk.Treeview:
@@ -295,7 +305,7 @@ class Navigator(ttk.Frame):
     def update_input_controls(self) -> None:
         objective = self.workbench.session.variable_goal if self.workbench.manager else None
         selected = self.variable_inputs.get(self.variable.get())
-        supported = selected.supported if selected else bool(re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.variable.get()))
+        supported = selected.supported if selected else parse_access_path(self.variable.get()) is not None
         if objective:
             self.goal_controls.pack_forget()
             help_text = f"최초 목표는 {objective.variable} → {objective.target_value}로 고정됩니다. 다른 값은 현재 변수 조사로 선택하세요."
@@ -305,7 +315,10 @@ class Navigator(ttk.Frame):
                          if len(self.variable_inputs) > 1 else
                          "선택한 분기를 통과하려는 변수와 원하는 값을 지정하세요. 예: pedal → 60")
         if not supported and self.variable.get():
-            help_text = f"{self.variable.get()}: 멤버·배열·포인터 경로 추적은 아직 미지원입니다. 단순 a로 바꾸어 추적하지 않습니다."
+            help_text = f"{self.variable.get()}: 배열 인덱스·복합 포인터 연산은 아직 추적하지 않습니다. 경로를 단순 이름으로 축약하지 않습니다."
+        access = parse_access_path(self.variable.get())
+        if access is not None and access.indirect:
+            help_text += " 포인터 대상은 별칭·호출 근거로 확인할 후보입니다."
         self.input_help.set(help_text)
         self.goal_button.state(["!disabled"] if supported and not self.busy else ["disabled"])
         self.inspect_button.state(["!disabled"] if supported and not self.busy and self.workbench.manager else ["disabled"])
@@ -464,13 +477,13 @@ class Navigator(ttk.Frame):
                                         enumerate(data.decode("utf-8", errors="replace").splitlines(), 1)))
         self.source.tag_remove("location", "1.0", "end")
         self.source.tag_add("location", f"{location.start_line}.0", f"{location.start_line}.end")
-        if location.start_line == location.end_line and location.end_byte > location.start_byte:
-            token = data[location.start_byte:location.end_byte].decode("utf-8", errors="replace")
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", token):
-                line = data.splitlines()[location.start_line - 1]
-                column = 7 + len(line[:location.start_column - 1].decode("utf-8", errors="replace"))
-                self.source.tag_add("tracked_value", f"{location.start_line}.{column}",
-                                    f"{location.start_line}.{column + len(token)}")
+        tracked = project.value_resolver.access_at(location)
+        if tracked and tracked.supported and tracked.location.start_line == tracked.location.end_line:
+            site = tracked.location
+            line = data.splitlines()[site.start_line - 1]
+            first = 7 + len(line[:site.start_column - 1].decode("utf-8", errors="replace"))
+            last = 7 + len(line[:site.end_column - 1].decode("utf-8", errors="replace"))
+            self.source.tag_add("tracked_value", f"{site.start_line}.{first}", f"{site.end_line}.{last}")
         self.source.see(f"{location.start_line}.0")
         # Switching tabs and wrapping labels changes the viewport after this call.
         # Apply focus after layout, without overwriting a newer source selection.
@@ -482,25 +495,24 @@ class Navigator(ttk.Frame):
         self.source_focus_id = self.root.after_idle(focus_after_layout)
 
     def select_source_identifier(self, event: tk.Event) -> str | None:
-        """Use C identifier boundaries; Windows text word selection includes punctuation."""
+        """Select a whole syntax access path, including b.a and (*p).a."""
         index = self.source.index(f"@{event.x},{event.y}")
-        row, column = (int(value) for value in index.split("."))
-        text = self.source.get(f"{row}.7", f"{row}.end")
-        for match in re.finditer(r"[A-Za-z_][A-Za-z0-9_]*(?:\s*(?:\.|->)\s*[A-Za-z_][A-Za-z0-9_]*)+", text):
-            if match.start() <= column - 7 < match.end():
-                self.source.tag_remove("sel", "1.0", "end")
-                self.pick_source_position(f"{row}.{match.start() + 7}")
-                self.variable.set(match.group())
-                self.update_input_controls()
-                return "break"
-        for match in re.finditer(r"(?<![A-Za-z0-9_])[A-Za-z_][A-Za-z0-9_]*(?![A-Za-z0-9_])", text):
-            if match.start() <= column - 7 < match.end():
-                self.source.tag_remove("sel", "1.0", "end")
-                start = f"{row}.{match.start() + 7}"
-                self.source.tag_add("sel", start, f"{row}.{match.end() + 7}")
-                self.pick_source_position(start)
-                return "break"
-        return None
+        self.source.tag_remove("sel", "1.0", "end")
+        self.pick_source_position(index)
+        if self.picked_location is None or self.workbench.project is None:
+            return None
+        item = self.workbench.project.value_resolver.access_at(self.picked_location)
+        if item is None:
+            return None
+        self.show_source(item.location)
+        data = dict(self.workbench.project.sources)[item.location.path].splitlines()
+        start = item.location
+        first = 7 + len(data[start.start_line - 1][:start.start_column - 1].decode("utf-8", errors="replace"))
+        last = 7 + len(data[start.end_line - 1][:start.end_column - 1].decode("utf-8", errors="replace"))
+        self.source.tag_add("sel", f"{start.start_line}.{first}", f"{start.end_line}.{last}")
+        self.variable.set(item.expression)
+        self.update_input_controls()
+        return "break"
 
     def capture_source_selection(self, event: tk.Event) -> None:
         self.pick_source_position(self.source.index(f"@{event.x},{event.y}"))
@@ -523,8 +535,22 @@ class Navigator(ttk.Frame):
         ranges = self.source.tag_ranges("sel")
         if ranges:
             selected = self.source.get(*ranges[:2]).strip()
-            if re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", selected):
-                self.variable.set(selected)
+            access = parse_access_path(selected)
+            syntax = self.workbench.project.value_resolver.access_at(self.picked_location)
+            if syntax and syntax.supported and (access is not None or data[syntax.location.start_byte:syntax.location.end_byte].decode("utf-8", errors="replace") == selected):
+                access = parse_access_path(syntax.expression)
+            if access is not None:
+                self.variable.set(access.expression)
+                if self.source.compare(index, ">=", ranges[0]) and self.source.compare(index, "<", ranges[1]):
+                    def position(text_index):
+                        r, c = (int(value) for value in str(text_index).split("."))
+                        byte_column = len(lines[r - 1].decode("utf-8", errors="replace")[:max(0, c - 7)].encode("utf-8"))
+                        return r, byte_column + 1, sum(len(value) for value in lines[:r - 1]) + byte_column
+                    start_row, start_col, start_byte = position(ranges[0])
+                    end_row, end_col, end_byte = position(ranges[1])
+                    self.picked_location = SourceRange(path, start_row, start_col, end_row, end_col, start_byte, end_byte)
+                    if syntax and syntax.supported:
+                        self.picked_location = syntax.location
                 self.update_input_controls()
         self.source_label.set(f"선택 위치 (아직 미기록): {path.name}:{row}")
         self.source.tag_remove("location", "1.0", "end")
@@ -539,13 +565,14 @@ class Navigator(ttk.Frame):
     def set_variable_goal(self) -> None:
         if not self.target_value.get().strip():
             raise ValueError("선택한 변수에 준비하려는 값을 '원하는 값'에 입력하세요.")
-        if not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", self.variable.get().strip()):
-            raise ValueError("추적할 단순 변수를 선택하세요. 멤버·포인터 경로는 아직 추적하지 않습니다.")
+        access = parse_access_path(self.variable.get())
+        if access is None:
+            raise ValueError("변수 또는 구조체 멤버 경로를 선택하세요. 배열·포인터 연산은 아직 해석하지 않습니다.")
         if self.workbench.manager is None:
             self.start()
             if self.workbench.manager is None:
                 return
-        self.workbench.set_variable_goal(self.variable.get().strip(), self.target_value.get().strip(),
+        self.workbench.set_variable_goal(access.expression, self.target_value.get().strip(),
                                          self.selected_location())
         self.refresh_trace()
         self.candidates_notebook.select(2)
@@ -630,8 +657,7 @@ class Navigator(ttk.Frame):
         else:
             self.target_value.set("")
         navigation = manager.current_step.relation in {"root", "call", "manual"}
-        tracked = (probe.expression if probe and probe.kind == "variable" else "반환값" if probe else
-                   "함수 관계" if navigation else "값 추적 종점")
+        tracked = _probe_text(probe, "함수 관계" if navigation else "값 추적 종점")
         if probe is None and "ct_accessibility_not_verified" in manager.current_step.uncertainty:
             tracked = "CT 전역 후보에서 값 추적 중지"
         self.current_summary.set(f"지금 조사: {manager.current_step.function.name} :: {tracked}"
@@ -645,6 +671,10 @@ class Navigator(ttk.Frame):
                                    "값 출처 추적 중지 · 필요한 실행 조건은 별도로 조사할 수 있습니다.")
         if "ct_accessibility_not_verified" in manager.current_step.uncertainty and probe is None:
             self.candidate_context.set("CT 전역 후보 도달 · 실제 CT 접근성과 설정할 값은 확인이 필요합니다.")
+            if "pointer_value_not_pointee_control" in manager.current_step.uncertainty:
+                self.candidate_context.set("포인터 변수 값의 CT 후보 · 가리키는 객체/멤버의 직접 제어를 뜻하지 않습니다.")
+            elif "object_origin_not_member_value" in manager.current_step.uncertainty:
+                self.candidate_context.set("객체 자체의 CT 후보 · 멤버 배치·접근성과 준비할 값은 별도 확인이 필요합니다.")
         _set_text(self.trace_details, f"최초 분기: {condition}\n{target.location.path}:{target.location.start_line}\n"
                   + self.goal.get() + "\n\n" + self.context.get())
         if (manager.current_step.function.id == target.function_id and self.workbench.project is not None
@@ -681,8 +711,7 @@ class Navigator(ttk.Frame):
             paths[step.id] = (paths[step.parent_id] + "." if step.parent_id else "") + str(child_counts[step.parent_id])
             site = step.selected_location
             label = f"{site.start_line}행 · {site.path.name}" if site else "미기록 (이전 세션)"
-            subject = (step.probe.expression if step.probe and step.probe.kind == "variable" else "반환값" if step.probe else
-                       "함수 조사" if step.relation in {"root", "call", "manual"} else "값 추적 종점")
+            subject = _probe_text(step.probe, "함수 조사" if step.relation in {"root", "call", "manual"} else "값 추적 종점")
             if step.probe is None and "ct_accessibility_not_verified" in step.uncertainty and step.parent_id:
                 parent = next(s for s in manager.session.steps if s.id == step.parent_id)
                 subject = (parent.probe.expression if parent.probe else "전역") + " (CT 후보)"
@@ -713,9 +742,9 @@ class Navigator(ttk.Frame):
         if candidate.value_kind is None:
             return "함수 호출 (값 연결 미확정)" if candidate.relation == "call" else "RTE 데이터 후보"
         probe = self.workbench.manager.current_step.probe
-        origin = probe.expression if probe and probe.kind == "variable" else "반환값" if probe else "선택 위치"
+        origin = _probe_text(probe, "선택 위치")
         destination = candidate.probe
-        target = destination.expression if destination and destination.kind == "variable" else "반환값" if destination else "추적 종점"
+        target = _probe_text(destination)
         return f"{origin} → {target}"
 
     def preview_candidate(self, table: ttk.Treeview) -> None:
@@ -768,7 +797,7 @@ class Navigator(ttk.Frame):
         step = next(s for s in manager.session.steps if s.id == selected[0])
         site = step.selected_location
         evidence = step.evidence
-        subject = step.probe.expression if step.probe and step.probe.kind == "variable" else "반환값" if step.probe else "종점 / 함수 조사"
+        subject = _probe_text(step.probe, "종점 / 함수 조사")
         _set_text(self.detail, f"조사 대상: {step.function.name} :: {subject}\n{step.reason}\n"
                   + (f"선택 위치: {site.path}:{site.start_line}\n" if site else "선택 위치: 미기록\n")
                   + (f"이동 근거: {evidence.path}:{evidence.start_line}\n" if evidence else "")

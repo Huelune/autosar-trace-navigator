@@ -3,7 +3,7 @@
 from dataclasses import replace
 
 from .access import AccessPath
-from .dataflow import ValueResolver, ValueSource, _access, _ancestors, _name, _unwrap, _walk
+from .dataflow import ValueResolver, ValueSource, _access, _name, _unwrap, _walk
 from .models import SourceRange, ValueProbe
 
 
@@ -96,12 +96,7 @@ class _Members:
                 and _name(n.child_by_field_name("declarator")) == root]
 
     def global_declarations(self, path, root):
-        tree = self.r._root(path)
-        return [n for n in _walk(tree) if n.type == "declaration"
-                and not any(a.type == "function_definition" for a in _ancestors(n, tree))
-                and any(_name(c.child_by_field_name("declarator") if c.type == "init_declarator" else c) == root
-                        for c in n.named_children
-                        if not any(d.type == "function_declarator" for d in _walk(c)))]
+        return list(self.r._global_declarations(path, root))
 
     @staticmethod
     def is_static(declarations):

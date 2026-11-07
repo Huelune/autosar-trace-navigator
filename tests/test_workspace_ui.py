@@ -23,7 +23,7 @@ class ConditionInputTests(unittest.TestCase):
             project = analyze_project(directory)
             inputs = project.value_resolver.branch_inputs(project.results[0].branches[0].id)
             self.assertEqual([(item.expression, item.supported) for item in inputs],
-                             [("b.a", False), ("p->a", False), ("table[i]", False), ("gate", True)])
+                             [("b.a", True), ("p->a", True), ("table[i]", False), ("gate", True)])
 
 
 class WorkspaceUiTests(unittest.TestCase):
@@ -103,10 +103,10 @@ class WorkspaceUiTests(unittest.TestCase):
         self.assertTrue(self.app.scope_entry.winfo_ismapped())
         self.assertEqual(self.app.inspection_notebook.tab(1, "text"), "근거 상세")
 
-    def test_member_selection_stays_whole_and_disables_unsupported_tracking(self):
+    def test_array_selection_stays_whole_and_disables_unsupported_tracking(self):
         with tempfile.TemporaryDirectory(dir=ROOT / "build") as directory:
             path = Path(directory) / "member.c"
-            path.write_text("int F(void) { if (b.a >= 60 && gate) return 1; return 0; }", encoding="utf-8")
+            path.write_text("int F(void) { if (b.a[0] >= 60 && gate) return 1; return 0; }", encoding="utf-8")
             workbench = Workbench()
             workbench.project = analyze_project(directory)
             function = workbench.project.functions[0]
@@ -114,11 +114,11 @@ class WorkspaceUiTests(unittest.TestCase):
             workbench.start(function.id, branch.id, "멤버 구분")
             self.app.workbench = workbench
             self.app.refresh_trace()
-            self.assertEqual(self.app.variable_entry["values"], ("b.a", "gate"))
+            self.assertEqual(self.app.variable_entry["values"], ("b.a[0]", "gate"))
             before = workbench.session
-            self.app.variable.set("b.a")
+            self.app.variable.set("b.a[0]")
             self.app.choose_branch_input()
-            self.assertIn("미지원", self.app.input_help.get())
+            self.assertIn("아직 추적하지", self.app.input_help.get())
             self.assertIn("disabled", self.app.goal_button.state())
             self.assertIn("disabled", self.app.inspect_button.state())
             self.assertEqual(workbench.session, before)

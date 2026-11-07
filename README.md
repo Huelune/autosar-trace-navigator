@@ -8,6 +8,8 @@ AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보�
 이름 기반 RTE Read/Write 공급·소비 후보 분석과 Tkinter GUI도 구현했습니다.
 변수 목표값의 공급 위치 역추적, 선택 라인 이력, 이동 전 후보 코드 미리보기를 지원합니다.
 분기 안의 여러 변수 중 조사할 값을 선택하고, 현재 소스와 후보·이력 코드를 동시에 비교할 수 있습니다.
+`b.a`, `p->a`의 멤버 경로와 `Rte_Read_State(&b)` 출력 인수도 추적합니다.
+[구조체 사용 예제와 저장 DB](docs/structs.md)를 제공합니다.
 
 처음 사용한다면 **[예제 DB로 따라 하는 사용법](docs/user-guide.md)**을 읽어보세요.
 전역 입력 후보까지 찾는 4단계 예시와 중첩 실행 조건을 조사하는 10단계 예시를 제공합니다.
@@ -85,8 +87,8 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 153개와
-C 시나리오 210개(기존 12개 + 확장 192개 + 실행 조건 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 160개와
+C 시나리오 216개(기존 12개 + 확장 192개 + 실행 조건 6개 + 구조체 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
 
 **실행 조건** 탭에서는 값을 만드는 코드의 조건 변수를 별도 하위 조사로 따라갑니다.
 extern 등 외부 연결 이름의 전역을 CT 제어 후보로 표시하며 static·const는 제외합니다.
