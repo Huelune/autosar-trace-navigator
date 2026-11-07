@@ -92,6 +92,7 @@ class GuiTests(unittest.TestCase):
         self.assertIs(self.app.workbench.project, before)
 
     def test_compact_layout_keeps_scope_search_and_start_accessible(self):
+        self.app.toggle_settings()
         self.root.geometry("1100x760")
         self.root.deiconify()
         self.root.update()
@@ -228,7 +229,8 @@ class GuiTests(unittest.TestCase):
         self.app.preview_candidate(self.app.calls)
         self.assertIn("EvaluateBrakeMode", self.app.candidate_source.get("1.0", "end"))
         self.assertEqual(self.app.candidate_source.cget("state"), "disabled")
-        self.assertEqual(self.app.source_notebook.select(), str(self.app.preview_tab))
+        self.assertNotIn(str(self.app.preview_tab), self.app.source_notebook.tabs())
+        self.assertEqual(self.app.source_notebook.select(), self.app.source_notebook.tabs()[0])
         self.assertEqual(self.app.workbench.session, before)
         self.assertFalse(self.app.workbench.dirty)
         self.assertEqual(self.app.picked_location, location)
@@ -346,9 +348,10 @@ class GuiTests(unittest.TestCase):
         self.root.geometry("1100x760")
         self.root.deiconify()
         self.root.update()
-        for widget in (self.app.variable_entry, self.app.target_entry,
+        self.assertFalse(self.app.goal_controls.winfo_ismapped())  # Original goal is already fixed.
+        for widget in (self.app.variable_entry,
                        *(b for b in self.app.buttons if b.cget("text") in
-                         {"선택 라인 기록", "변수 목표 설정", "현재 변수 조사", "선택한 이력 단계로 이동",
+                         {"선택 라인 기록", "현재 변수 조사", "선택한 이력 단계로 이동",
                           "선택 분기로 새 조사 시작"})):
             with self.subTest(widget=widget):
                 self.assertTrue(widget.winfo_ismapped())

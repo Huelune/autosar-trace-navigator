@@ -8,7 +8,7 @@ from collections import defaultdict
 from types import MappingProxyType
 
 from .models import FunctionCall, FunctionDefinition, ParseResult, SourceRange, ValueProbe
-from .dataflow import ValueResolver
+from .dataflow import ConditionInput, ValueResolver
 from .parser import parse_source
 from .rte import RteAccess, RteDataDependency, RteResolution, inspect_rte_header, resolve_rte
 from .scanner import scan_sources
@@ -245,6 +245,12 @@ class Workbench:
         self.session
         self.manager.set_variable_goal(variable, target_value, location)
         self.dirty = True
+
+    def branch_inputs(self, branch_id: str) -> tuple[ConditionInput, ...]:
+        """Offer condition inputs for explicit selection before choosing a value goal."""
+        if self.project is None:
+            return ()
+        return self.project.value_resolver.branch_inputs(branch_id)
 
     def inspect_variable(self, variable: str, location: SourceRange) -> None:
         self.session

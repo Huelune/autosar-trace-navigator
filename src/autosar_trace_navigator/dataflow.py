@@ -35,6 +35,15 @@ class ExecutionRequirement:
     uncertainty: tuple[str, ...]
 
 
+@dataclass(frozen=True)
+class ConditionInput:
+    """A selectable condition expression; unsupported access paths stay intact."""
+
+    expression: str
+    location: SourceRange
+    supported: bool
+
+
 def _walk(node: Node) -> Iterator[Node]:
     stack = [node]
     while stack:
@@ -72,6 +81,39 @@ class ValueResolver:
     def _location(self, path: Path, node: Node) -> SourceRange:
         return SourceRange(path, node.start_point.row + 1, node.start_point.column + 1,
                            node.end_point.row + 1, node.end_point.column + 1, node.start_byte, node.end_byte)
+
+    def branch_inputs(self, branch_id: str) -> tuple[ConditionInput, ...]:
+        """List condition inputs without mistaking b.a, p->a or a[i] for plain a."""
+        branch = next((b for result in self.project.results for b in result.branches if b.id == branch_id), None)
+        if branch is None or branch.condition is None:
+            return ()
+        syntax = next(n for n in _walk(self._function(branch.function_id))
+                      if n.type == "if_statement" and n.start_byte == branch.location.start_byte)
+        condition = syntax.child_by_field_name("condition")
+        inputs = []
+
+        def visit(node: Node) -> None:
+            if node.type == "call_expression":
+                arguments = node.child_by_field_name("arguments")
+                if arguments is not None:
+                    for child in arguments.named_children:
+                        visit(child)
+                return
+            if node.type in {"field_expression", "subscript_expression", "pointer_expression"}:
+                inputs.append(ConditionInput(node.text.decode("utf-8", errors="replace"),
+                                             self._location(branch.location.path, node), False))
+            elif node.type == "identifier":
+                inputs.append(ConditionInput(node.text.decode("utf-8", errors="replace"),
+                                             self._location(branch.location.path, node), True))
+            else:
+                for child in node.named_children:
+                    visit(child)
+        if condition is not None:
+            visit(condition)
+        unique = {}
+        for item in inputs:
+            unique.setdefault(item.expression, item)
+        return tuple(unique.values())
 
     def conditions(self, site: SourceRange) -> tuple[ExecutionRequirement, ...]:
         """Structural if/else prerequisites, including false preceding arms of a chain."""
