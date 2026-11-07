@@ -12,6 +12,7 @@ from tkinter import filedialog, messagebox, simpledialog, ttk
 from .storage import TraceStore
 from .models import FunctionDefinition, SourceRange, ValueProbe
 from .access import parse_access_path
+from .ui_style import configure_workspace
 from .workbench import InvestigationCandidate, Workbench, analyze_project
 
 
@@ -55,7 +56,9 @@ def _tree(parent: ttk.Frame, columns: tuple[str, ...], height: int = 8) -> ttk.T
 def _text(parent: ttk.Frame, height: int = 10) -> tk.Text:
     frame = ttk.Frame(parent)
     frame.pack(fill="both", expand=True)
-    text = tk.Text(frame, wrap="none", width=1, height=height, state="disabled", font=("Consolas", 10))
+    text = tk.Text(frame, wrap="none", width=1, height=height, state="disabled", font=("Consolas", 11),
+                   background="#ffffff", foreground="#22334c", relief="flat", padx=7, pady=6,
+                   selectbackground="#dceaff", selectforeground="#123c7e")
     y = ttk.Scrollbar(frame, orient="vertical", command=text.yview)
     x = ttk.Scrollbar(frame, orient="horizontal", command=text.xview)
     text.configure(yscrollcommand=y.set, xscrollcommand=x.set)
@@ -78,6 +81,7 @@ class Navigator(ttk.Frame):
     """All Tk calls stay on the main thread; only project analysis uses a worker."""
 
     def __init__(self, root: tk.Tk, workbench: Workbench | None = None) -> None:
+        configure_workspace(root)
         super().__init__(root, padding=8)
         self.root = root
         self.workbench = workbench or Workbench()
@@ -100,13 +104,17 @@ class Navigator(ttk.Frame):
         self.buttons = []
         self.variable_inputs = {}
         toolbar = ttk.Frame(self)
-        toolbar.pack(fill="x")
+        toolbar.pack(fill="x", pady=(0, 6))
+        ttk.Label(toolbar, text="Trace Navigator", style="Title.TLabel").pack(side="left", padx=(0, 18))
+        self.toolbar_buttons = {}
         for label, command in (("루트 폴더 선택", self.choose_project), ("선택 범위 분석", self.analyze_scope),
                                ("세션 저장", self.save), ("세션 불러오기", self.restore), ("뒤로", self.back),
                                ("분석 설정 접기/펼치기", self.toggle_settings)):
-            self.button(toolbar, label, command).pack(side="left", padx=(0, 6))
-        self.status = tk.StringVar(value="1. 소스 폴더와 분석 범위를 선택하세요.")
-        ttk.Label(self, textvariable=self.status, wraplength=1400).pack(fill="x", pady=4)
+            button = self.button(toolbar, label, command)
+            button.pack(side="left", padx=(0, 5))
+            self.toolbar_buttons[label] = button
+        self.status = tk.StringVar(value="로컬 작업 공간 · C/H 원본 읽기 전용")
+        ttk.Label(self, textvariable=self.status, style="Muted.TLabel", wraplength=1400).pack(side="bottom", fill="x", pady=(5, 0))
         self.settings = ttk.LabelFrame(self, text="분석 설정", padding=4)
         self.settings.pack(fill="x")
         self.project_root = tk.StringVar(value=str(self.workbench.project.root) if self.workbench.project else "미선택")
@@ -126,13 +134,18 @@ class Navigator(ttk.Frame):
         self.exclude_entry = ttk.Entry(exclude, textvariable=self.exclusions)
         self.exclude_entry.pack(side="left", fill="x", expand=True, padx=8)
         self.goal = tk.StringVar(value="최초 목표: 왼쪽에서 함수와 분기를 선택하세요.")
-        self.goal_label = ttk.Label(self, textvariable=self.goal, font=("맑은 고딕", 11, "bold"), wraplength=1400)
-        self.goal_label.pack(fill="x", pady=(6, 2))
+        self.goal_card = ttk.Frame(self, style="Goal.TFrame", padding=(12, 8))
+        self.goal_card.pack(fill="x", pady=(5, 4))
+        self.goal_label = ttk.Label(self.goal_card, textvariable=self.goal, style="Goal.TLabel", wraplength=1400)
+        self.goal_label.pack(fill="x")
         self.context = tk.StringVar(value="조사 이유: 목표 분기를 선택하고 시작하세요.")
         self.current_summary = tk.StringVar(value="다음: 분기 선택 → 새 조사 시작 → 조사할 변수 선택")
-        self.current_label = ttk.Label(self, textvariable=self.current_summary, wraplength=1400)
-        self.current_label.pack(fill="x", pady=(0, 4))
-        pane = ttk.Panedwindow(self, orient="horizontal")
+        self.current_label = ttk.Label(self.goal_card, textvariable=self.current_summary, style="Current.TLabel", wraplength=1400)
+        self.current_label.pack(fill="x", pady=(4, 0))
+        self.workflow_hint = tk.StringVar()
+        self.workflow_label = ttk.Label(self, textvariable=self.workflow_hint, style="Hint.TLabel", wraplength=1400)
+        self.workflow_label.pack(fill="x", pady=(2, 6))
+        pane = self.workspace_pane = ttk.Panedwindow(self, orient="horizontal")
         pane.pack(fill="both", expand=True)
         left, middle, right = (ttk.Frame(pane, padding=4, width=width) for width in (240, 570, 650))
         pane.add(left, weight=1)
@@ -163,7 +176,8 @@ class Navigator(ttk.Frame):
         self.branches.column("분기", width=65)
         self.branches.column("조건 / 행", width=190)
         self.branches.bind("<<TreeviewSelect>>", self.preview_branch)
-        self.button(left, "선택 분기로 새 조사 시작", self.start).pack(fill="x", pady=4)
+        self.start_button = self.button(left, "선택 분기로 새 조사 시작", self.start)
+        self.start_button.pack(side="bottom", fill="x", pady=4, before=self.functions.master)
 
         value_controls = ttk.LabelFrame(middle, text="2. 이 분기에서 어떤 값을 준비할까요?", padding=4)
         value_controls.pack(fill="x", pady=(0, 4))
@@ -178,20 +192,23 @@ class Navigator(ttk.Frame):
         self.variable_entry.pack(side="left", fill="x", expand=True, padx=4)
         self.variable_entry.bind("<<ComboboxSelected>>", lambda e: self.run_action(self.choose_branch_input))
         self.variable_entry.bind("<KeyRelease>", lambda e: self.update_input_controls())
-        self.variable_entry.bind("<Return>", lambda e: self.run_action(self.inspect_variable))
+        self.variable_entry.bind("<Return>", lambda e: self.run_action(self.activate_variable))
         self.goal_controls = ttk.Frame(value_controls)
         self.goal_controls.pack(fill="x", pady=3)
         ttk.Label(self.goal_controls, text="원하는 값").pack(side="left")
         self.target_value = tk.StringVar()
         self.target_entry = ttk.Entry(self.goal_controls, textvariable=self.target_value, width=10)
         self.target_entry.pack(side="left", padx=4)
+        self.target_entry.bind("<Return>", lambda e: self.run_action(self.set_variable_goal))
         self.goal_button = self.button(self.goal_controls, "변수 목표 설정", self.set_variable_goal)
+        self.goal_button.configure(style="Accent.TButton")
         self.goal_button.pack(side="left")
         actions = ttk.Frame(value_controls)
         actions.pack(fill="x")
         self.inspect_button = self.button(actions, "현재 변수 조사", self.inspect_variable)
         self.inspect_button.pack(side="left", padx=(0, 4))
-        self.button(actions, "선택 라인 기록", self.record_location).pack(side="left")
+        self.record_button = self.button(actions, "선택 라인 기록", self.record_location)
+        self.record_button.pack(side="left")
         self.source_label = tk.StringVar(value="현재 소스 — 읽기 전용")
         source_label = ttk.Label(middle, textvariable=self.source_label, wraplength=500)
         source_label.pack(fill="x")
@@ -213,7 +230,7 @@ class Navigator(ttk.Frame):
         candidate_header = ttk.Label(right, textvariable=self.candidate_context, wraplength=600,
                                      font=("맑은 고딕", 10, "bold"))
         candidate_header.pack(fill="x")
-        right_pane = ttk.Panedwindow(right, orient="vertical")
+        right_pane = self.comparison_pane = ttk.Panedwindow(right, orient="vertical")
         right_pane.pack(fill="both", expand=True)
         candidate_area, preview_area, history_area = (ttk.Frame(right_pane) for _ in range(3))
         for frame, weight in ((candidate_area, 2), (preview_area, 3), (history_area, 2)):
@@ -225,6 +242,11 @@ class Navigator(ttk.Frame):
         candidates.add(rte_tab, text="RTE 공급자")
         candidates.add(value_tab, text="값 출처")
         candidates.add(condition_tab, text="실행 조건")
+        self.candidate_hints = []
+        for tab in (call_tab, rte_tab, value_tab, condition_tab):
+            hint = tk.StringVar()
+            ttk.Label(tab, textvariable=hint, style="Muted.TLabel", wraplength=400).pack(fill="x", padx=3, pady=4)
+            self.candidate_hints.append(hint)
         self.calls = _tree(call_tab, ("호출", "대상 / 위치", "조사 연결"), 3)
         self.rte = _tree(rte_tab, ("데이터", "공급자 / 위치", "조사 연결"), 3)
         self.values = _tree(value_tab, ("값 출처", "대상 / 위치", "조사 연결"), 3)
@@ -235,16 +257,24 @@ class Navigator(ttk.Frame):
             table.column(table["columns"][0], width=200)
             table.column(table["columns"][1], width=170)
             table.column(table["columns"][2], width=160)
+            table.configure(displaycolumns=(table["columns"][2], table["columns"][0], table["columns"][1]))
             table.bind("<<TreeviewSelect>>", lambda e, table=table: self.preview_candidate(table))
-        self.button(call_tab, "호출 후보 조사", lambda: self.follow(self.calls)).pack(fill="x")
-        self.button(rte_tab, "RTE 공급자 후보 조사", lambda: self.follow(self.rte)).pack(fill="x")
-        self.button(value_tab, "선택 출처 조사", lambda: self.follow(self.values)).pack(fill="x")
-        self.button(condition_tab, "조건 변수 하위 조사", lambda: self.follow(self.requirements)).pack(fill="x")
+        self.follow_buttons = {}
+        for tab, table, label in zip((call_tab, rte_tab, value_tab, condition_tab), self.candidate_tables,
+                                     ("호출 후보 조사", "RTE 공급자 후보 조사", "선택 출처 조사", "조건 변수 하위 조사")):
+            button = self.button(tab, label, lambda table=table: self.follow(table))
+            button.configure(style="Accent.TButton")
+            button.pack(side="bottom", fill="x", pady=(3, 0), before=table.master)
+            self.follow_buttons[table] = button
         self.preview_tab = ttk.LabelFrame(preview_area, text="이동 전 비교 — 후보 / 이력 코드", padding=3)
         self.preview_tab.pack(fill="both", expand=True, pady=3)
         self.preview_label = tk.StringVar(value="행을 선택해 코드를 비교하세요. 현재 소스와 조사 위치는 유지됩니다.")
-        preview_label = ttk.Label(self.preview_tab, textvariable=self.preview_label, wraplength=600)
+        preview_label = ttk.Label(self.preview_tab, textvariable=self.preview_label, width=1, anchor="w")
         preview_label.pack(fill="x")
+        self.preview_summary = tk.StringVar(value="목록의 행을 선택하면 값 연결·위치·실행 조건을 확인할 수 있습니다.")
+        self.preview_summary_label = ttk.Label(self.preview_tab, textvariable=self.preview_summary,
+                                               style="Muted.TLabel", width=1, anchor="w")
+        self.preview_summary_label.pack(fill="x", pady=(0, 2))
         self.candidate_source = _text(self.preview_tab, 5)
         self.candidate_source.tag_configure("location", background="#fff0b3", foreground="#111111")
         self.inspection_notebook = ttk.Notebook(history_area)
@@ -259,14 +289,22 @@ class Navigator(ttk.Frame):
         for column, width in zip(self.history["columns"], (100, 140, 115, 190, 100)):
             self.history.column(column, width=width)
         self.history.bind("<<TreeviewSelect>>", self.preview_history)
-        self.button(history_tab, "선택한 이력 단계로 이동", self.select_history).pack(fill="x", pady=2)
-        right.bind("<Configure>", lambda e: (candidate_header.configure(wraplength=max(180, e.width - 10)),
-                                             preview_label.configure(wraplength=max(180, e.width - 20))))
+        self.history_button = self.button(history_tab, "선택한 이력 단계로 이동", self.select_history)
+        self.history_button.pack(side="bottom", fill="x", pady=2, before=self.history.master)
+        right.bind("<Configure>", lambda e: candidate_header.configure(wraplength=max(180, e.width - 10)))
         root.bind("<Configure>", lambda e: self.resize_summary(e))
         if self.workbench.project is not None:
             self.settings.pack_forget()
         self.render_project()
         self.refresh_trace()
+        self.layout_id = None
+        self.layout_initialized = False
+        pane.bind("<Map>", self.schedule_initial_layout)
+
+    def schedule_initial_layout(self, event: tk.Event) -> None:
+        """Wait for the workspace to become visible before assigning initial pane sizes."""
+        if event.widget == self.workspace_pane and not self.layout_initialized and self.layout_id is None:
+            self.layout_id = self.root.after_idle(self.layout_workspace)
 
     def button(self, parent: ttk.Frame, label: str, command: Callable[[], None]) -> ttk.Button:
         widget = ttk.Button(parent, text=label, command=lambda: self.run_action(command))
@@ -281,15 +319,69 @@ class Navigator(ttk.Frame):
 
     def resize_summary(self, event: tk.Event) -> None:
         if event.widget == self.root:
-            for label in (self.goal_label, self.current_label):
-                label.configure(wraplength=max(400, event.width - 24))
+            for label in (self.goal_label, self.current_label, self.workflow_label):
+                label.configure(wraplength=max(400, event.width - 48))
+
+    def layout_workspace(self) -> None:
+        """Start with space for both code views; later sash moves remain user controlled."""
+        self.layout_id = None
+        self.layout_initialized = True
+        self.root.update_idletasks()
+        width = self.workspace_pane.winfo_width()
+        if width > 1:
+            left = max(205, min(245, int(width * .18)))
+            self.workspace_pane.sashpos(0, left)
+            self.workspace_pane.sashpos(1, left + int((width - left) * .5))
+        height = self.comparison_pane.winfo_height()
+        if height > 1:
+            self.comparison_pane.sashpos(0, int(height * .34))
+            self.comparison_pane.sashpos(1, int(height * .73))
+
+    def update_actions(self) -> None:
+        """Enable only actions with a valid current selection; never mutate a trace."""
+        if not hasattr(self, "follow_buttons"):
+            return
+        manager = self.workbench.manager
+        enabled = not self.busy
+        def state(button: ttk.Button, ready: bool) -> None:
+            button.state(["!disabled"] if enabled and ready else ["disabled"])
+        state(self.toolbar_buttons["선택 범위 분석"], self.project_root.get() != "미선택")
+        state(self.toolbar_buttons["세션 저장"], manager is not None)
+        state(self.toolbar_buttons["뒤로"], manager is not None and manager.current_step.parent_id is not None)
+        state(self.start_button, bool(self.functions.selection() and self.branches.selection()))
+        state(self.record_button, manager is not None and self.picked_location is not None)
+        for table, button in self.follow_buttons.items():
+            selected = table.selection()
+            candidate = self.candidate_map.get(selected[0]) if selected else None
+            state(button, candidate is not None and candidate.function is not None)
+        selected = self.history.selection()
+        state(self.history_button, bool(manager and selected and selected[0] != manager.current_step.id))
+
+    def update_workflow(self) -> None:
+        """Offer one next step without treating candidates as verified execution."""
+        manager = self.workbench.manager
+        if self.busy:
+            hint = "범위를 분석하고 있습니다. 기존 목표와 조사 이력은 유지됩니다."
+        elif self.workbench.project is None:
+            hint = ("소스를 다시 분석하면 후보와 코드를 볼 수 있습니다. 저장된 목표와 이력은 열람할 수 있습니다."
+                    if manager else "시작: 루트 폴더 선택 → 분석 범위 입력 → 선택 범위 분석")
+        elif manager and "ct_accessibility_not_verified" in manager.current_step.uncertainty and manager.current_step.probe is None:
+            hint = "다음: CT 접근성과 설정값을 검토하세요. 다른 실행 조건은 이력에서 계산 지점으로 돌아가 조사합니다."
+        elif manager and manager.current_step.probe:
+            hint = "다음: 값 출처의 행 선택 → 오른쪽 코드와 근거 확인 → 선택 출처 조사"
+        elif self.branches.selection() or manager:
+            hint = "다음: 추적할 변수와 원하는 값 선택 → 변수 목표 설정 · 호출 관계는 함수 호출 탭에서 조사"
+        else:
+            hint = "다음: 함수 이름 검색 → 목표 분기 선택 → 추적할 변수와 원하는 값 지정"
+        self.workflow_hint.set(hint)
+        self.update_actions()
 
     def toggle_settings(self) -> None:
         """Keep paths and budgets out of the normal investigation workspace."""
         if self.settings.winfo_manager():
             self.settings.pack_forget()
         else:
-            self.settings.pack(fill="x", before=self.goal_label)
+            self.settings.pack(fill="x", before=self.goal_card)
 
     def offer_branch_inputs(self, branch_id: str, preferred: str | None = None) -> None:
         self.variable_inputs = {item.expression: item for item in self.workbench.branch_inputs(branch_id)}
@@ -308,7 +400,7 @@ class Navigator(ttk.Frame):
         supported = selected.supported if selected else parse_access_path(self.variable.get()) is not None
         if objective:
             self.goal_controls.pack_forget()
-            help_text = f"최초 목표는 {objective.variable} → {objective.target_value}로 고정됩니다. 다른 값은 현재 변수 조사로 선택하세요."
+            help_text = "현재 조사할 값 · 최초 목표는 상단에 유지됩니다."
         else:
             self.goal_controls.pack(fill="x", pady=3, before=self.inspect_button.master)
             help_text = ("조건에 값이 여러 개 있습니다. 추적할 변수를 선택하고 원하는 값을 입력하세요."
@@ -322,6 +414,7 @@ class Navigator(ttk.Frame):
         self.input_help.set(help_text)
         self.goal_button.state(["!disabled"] if supported and not self.busy else ["disabled"])
         self.inspect_button.state(["!disabled"] if supported and not self.busy and self.workbench.manager else ["disabled"])
+        self.update_workflow()
 
     def choose_branch_input(self) -> None:
         """Selecting a variable previews its own use site; it never changes a trace."""
@@ -330,6 +423,14 @@ class Navigator(ttk.Frame):
             self.show_source(item.location)
         self.update_input_controls()
 
+    def activate_variable(self) -> None:
+        """Enter prepares an initial goal or inspects a value under an existing goal."""
+        if self.workbench.manager and self.workbench.session.variable_goal:
+            self.inspect_variable()
+        else:
+            self.choose_branch_input()
+            self.target_entry.focus_set()
+
     def choose_project(self) -> None:
         directory = filedialog.askdirectory(parent=self.root, title="C/H 소스 폴더 선택")
         if directory:
@@ -337,6 +438,7 @@ class Navigator(ttk.Frame):
             if not self.settings.winfo_manager():
                 self.toggle_settings()
             self.status.set("루트를 선택했습니다. 분석 범위를 입력하고 선택 범위 분석을 누르세요.")
+            self.update_workflow()
 
     def analyze_scope(self) -> None:
         if self.project_root.get() == "미선택":
@@ -356,6 +458,7 @@ class Navigator(ttk.Frame):
         self.exclude_entry.state(["disabled"])
         self.scope_entry.state(["disabled"])
         self.status.set(f"분석 중: {directory} — 기존 조사 상태는 유지됩니다.")
+        self.update_workflow()
         self.future = self.executor.submit(analyze_project, directory, exclude_paths=excludes, include_paths=includes)
         self.poll_id = self.root.after(80, self.poll_analysis)
 
@@ -394,6 +497,7 @@ class Navigator(ttk.Frame):
         self.source_label.set("소스 미리보기 (분석 시점, 읽기 전용)")
         project = self.workbench.project
         if project is None:
+            self.update_workflow()
             return
         self.project_root.set(str(project.root))
         scopes = project.scope or (project.root,)
@@ -404,6 +508,7 @@ class Navigator(ttk.Frame):
         diagnostics = chain(*(result.diagnostics for result in project.results), project.rte.diagnostics)
         _set_text(self.diagnostics, f"현재 범위 진단 {total}개 중 최대 500개 표시\n\n" + "\n".join(
             f"{d.location.path}:{d.location.start_line}\n{d.code}: {d.message}\n" for d in islice(diagnostics, 500)))
+        self.update_workflow()
 
     def render_function_page(self, offset: int = 0) -> None:
         selected = self.functions.selection()
@@ -429,6 +534,7 @@ class Navigator(ttk.Frame):
         if selected and self.functions.exists(selected[0]):
             self.functions.selection_set(selected[0])
             self.browse_function()
+        self.update_workflow()
 
     def search_functions(self) -> None:
         self.render_function_page()
@@ -459,6 +565,7 @@ class Navigator(ttk.Frame):
         location = (manager.current_step.selected_location
                     if manager and manager.current_step.function == function else None)
         self.show_source(location or function.location)
+        self.update_workflow()
 
     def show_source(self, location: SourceRange) -> None:
         if self.source_focus_id is not None:
@@ -468,6 +575,7 @@ class Navigator(ttk.Frame):
         project = self.workbench.project
         data = next((data for path, data in project.sources if path == location.path), None) if project else None
         self.picked_location = location if data is not None else None
+        self.update_actions()
         self.source_label.set(f"현재 소스 · {location.path.name}:{location.start_line} · 읽기 전용")
         if data is None:
             _set_text(self.source, "이 위치의 분석 소스가 없습니다. 해당 소스 폴더를 분석하세요.\n"
@@ -556,6 +664,7 @@ class Navigator(ttk.Frame):
         self.source.tag_remove("location", "1.0", "end")
         self.source.tag_remove("tracked_value", "1.0", "end")
         self.source.tag_add("location", f"{row}.0", f"{row}.end")
+        self.update_actions()
 
     def selected_location(self) -> SourceRange:
         if self.picked_location is None:
@@ -592,6 +701,7 @@ class Navigator(ttk.Frame):
             branch = next(b for r in self.workbench.project.results for b in r.branches if b.id == selected[0])
             self.show_source(branch.location)
             self.offer_branch_inputs(branch.id)
+        self.update_workflow()
 
     def discard_allowed(self) -> bool:
         return not self.workbench.dirty or messagebox.askyesno(
@@ -620,7 +730,12 @@ class Navigator(ttk.Frame):
         _set_text(self.detail, "후보를 선택해 근거 위치와 불확실성을 확인하세요.")
         _set_text(self.candidate_source, "후보 또는 이력을 선택하세요.")
         self.preview_label.set("코드는 현재 분석 시점의 읽기 전용 스냅샷입니다.")
+        self.preview_summary.set("행을 선택해 비교하세요. 열람만으로 조사 위치나 이력이 바뀌지 않습니다.")
         manager = self.workbench.manager
+        for index, hint in enumerate(self.candidate_hints):
+            hint.set("변수를 지정하면 출처 후보를 볼 수 있습니다." if index == 2 else
+                     "조사를 시작하면 현재 위치의 후보를 볼 수 있습니다.")
+            self.candidates_notebook.tab(index, text=("함수 호출", "RTE 공급자", "값 출처", "실행 조건")[index] + " (0)")
         if manager is None:
             self.update_input_controls()
             return
@@ -704,6 +819,13 @@ class Navigator(ttk.Frame):
                 candidate_label = _VALUE_LABELS[candidate.value_kind] + ": " + candidate.label.split(": ", 1)[1]
             connection = self.candidate_connection(candidate)
             table.insert("", "end", iid=key, values=(candidate_label, label, connection))
+        for index, (table, title) in enumerate(zip(self.candidate_tables, ("함수 호출", "RTE 공급자", "값 출처", "실행 조건"))):
+            count = len(table.get_children())
+            self.candidates_notebook.tab(index, text=f"{title} ({count})")
+            empty = ("현재 범위에서 호출 후보를 찾지 못했습니다.", "현재 범위에서 RTE 공급 후보를 찾지 못했습니다.",
+                     "현재 범위에서 추가 출처를 찾지 못했습니다." if probe else "조사할 변수를 선택하면 값 출처를 볼 수 있습니다.",
+                     "구조상 if 조건 후보가 없습니다. 실행이 보장되는 것은 아닙니다.")[index]
+            self.candidate_hints[index].set("행 선택 → 근거 코드 비교 → 아래 버튼으로 조사 이동" if count else empty)
         paths, child_counts = {}, {}
         for step in manager.session.steps:
             marker = "▶ " if step.id == manager.session.current_step_id else ""
@@ -717,7 +839,7 @@ class Navigator(ttk.Frame):
                 subject = (parent.probe.expression if parent.probe else "전역") + " (CT 후보)"
             self.history.insert("", "end", iid=step.id,
                                 values=(marker + paths[step.id] + " · " + step.relation, step.function.name, label, step.reason, subject))
-        self.history.configure(displaycolumns=("현재 / 관계", "조사 변수", "함수", "선택 위치", "조사 이유"))
+        self.history.configure(displaycolumns=("현재 / 관계", "조사 변수", "함수", "선택 위치"))
         current = manager.current_step.function
         self.render_function_page(self.page_offset)
         if self.functions.exists(current.id):
@@ -736,6 +858,7 @@ class Navigator(ttk.Frame):
                     and manager.session.current_step_id == step_id):
                 self.history.see(step_id)
         self.history_focus_id = self.root.after_idle(focus_history_after_layout)
+        self.update_workflow()
 
     def candidate_connection(self, candidate: InvestigationCandidate) -> str:
         """Name the tracked value separately from general call/RTE navigation."""
@@ -760,12 +883,18 @@ class Navigator(ttk.Frame):
                       + "확정되지 않은 후보 / 검토 사항:\n" + "\n".join(candidate.uncertainty))
             location = candidate.selected_location or (candidate.function.location if candidate.function else candidate.evidence)
             self.show_preview(candidate.function, location, "후보 값 연결: " + self.candidate_connection(candidate))
+            truths = sum(guard.required_truth for guard in guards)
+            condition_hint = (f"조건 {len(guards)}개 (참 {truths} · 거짓 {len(guards) - truths}) · 근거 상세에서 확인"
+                              if guards else "구조상 if 조건 없음 · 도달 미증명")
+            self.preview_summary.set(f"근거 {candidate.evidence.path.name}:{candidate.evidence.start_line} · 연결 미확정\n"
+                                     + condition_hint)
+        self.update_actions()
 
     def show_preview(self, function: FunctionDefinition | None, location: SourceRange, heading: str) -> None:
         """Display bounded snapshot code without changing the active selection or session."""
         project = self.workbench.project
         name = function.name if function else "대상 함수 미확인"
-        self.preview_label.set(f"{heading} | {name}\n{location.path.name}:{location.start_line}")
+        self.preview_label.set(f"{heading} | {name} · {location.path.name}:{location.start_line}")
         if function is not None and (project is None or project.functions_by_id.get(function.id) != function):
             _set_text(self.candidate_source, "저장된 함수와 현재 분석 정보가 일치하지 않아 코드를 표시할 수 없습니다.")
             return
@@ -793,6 +922,7 @@ class Navigator(ttk.Frame):
         selected = self.history.selection()
         manager = self.workbench.manager
         if not selected or manager is None:
+            self.update_actions()
             return
         step = next(s for s in manager.session.steps if s.id == selected[0])
         site = step.selected_location
@@ -803,6 +933,9 @@ class Navigator(ttk.Frame):
                   + (f"이동 근거: {evidence.path}:{evidence.start_line}\n" if evidence else "")
                   + "\n".join(step.uncertainty))
         self.show_preview(step.function, site or step.function.location, "이력 코드 — 이동은 별도 버튼")
+        reason = " ".join(step.reason.split())
+        self.preview_summary.set("조사 이유: " + reason[:110] + ("…" if len(reason) > 110 else ""))
+        self.update_actions()
 
     def follow(self, table: ttk.Treeview) -> None:
         selected = table.selection()
@@ -882,6 +1015,9 @@ class Navigator(ttk.Frame):
                 self.root.after_cancel(self.history_focus_id)
                 self.history_focus_id = None
             self.executor.shutdown(wait=False, cancel_futures=True)
+            if getattr(self, "layout_id", None) is not None:
+                self.root.after_cancel(self.layout_id)
+                self.layout_id = None
             self.root.destroy()
 
 
