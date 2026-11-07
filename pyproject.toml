@@ -13,5 +13,14 @@ dependencies = [
     "tree-sitter-c==0.24.1",
 ]
 
+[project.gui-scripts]
+autosar-trace-navigator = "autosar_trace_navigator.gui:main"
+
+[dependency-groups]
+test = ["ziglang==0.15.2"]
+
+[tool.uv]
+python-downloads = "never"
+
 [tool.setuptools.packages.find]
 where = ["src"]

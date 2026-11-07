@@ -27,6 +27,8 @@
 
 ## 테스트 규칙
 - 표준 unittest를 사용한다: `.venv\Scripts\python -m unittest discover -s tests -v`.
+- uv 환경에서는 `python -m uv sync --locked --group test` 후 `python -m uv run --locked --group test python -m unittest discover -s tests -v`를 사용한다.
+- 실행·테스트 의존성 변경 시 uv.lock을 갱신하고 오프라인 실행 가능성을 확인한다. Tkinter·SQLite를 pip 의존성으로 추가하지 않는다.
 - 테스트 데이터는 사용자 지정 test/ 아래 가상 코드로 구성한다. Python 자동 검증은 tests/에 둔다.
 - 스캐너 구현 시 확장자, 중첩 경로, 제외 경로 및 원본 무변경을 검증한다.
 - 파서 구현 시 함수 정의/호출, 중첩 if/else if/else, 위치, 매크로 불확실성을 검증한다.

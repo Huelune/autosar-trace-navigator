@@ -25,6 +25,10 @@ class EnvironmentTests(unittest.TestCase):
         self.assertFalse(tree.root_node.has_error)
         self.assertEqual(tree.root_node.named_children[0].type, "function_definition")
 
+    def test_installed_gui_command_resolves_to_callable_entrypoint(self):
+        command, = importlib.metadata.entry_points(group="gui_scripts", name="autosar-trace-navigator")
+        self.assertTrue(callable(command.load()))
+
     def test_sqlite_local_storage_available(self):
         with closing(sqlite3.connect(":memory:")) as connection:
             self.assertEqual(connection.execute("SELECT 1").fetchone(), (1,))

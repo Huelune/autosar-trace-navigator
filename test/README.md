@@ -65,13 +65,16 @@ Python 테스트는 모든 C/H 구문, 6단계 호출 경로, 목표 else-if 및
 출력 모드와 쓰기 횟수를 검증합니다. 컴파일 경고는 오류로 처리합니다.
 완전한 분기 커버리지 측정이나 실제 ECU 동작 검증을 의미하지 않습니다.
 
-실행 검증에는 C99 컴파일러가 필요합니다. PATH의 Zig/GCC/Clang 또는 이 프로젝트의
-`.venv/c-tools/ziglang/zig.exe`를 사용합니다. 없으면 C 실행 테스트만 skip됩니다.
-Windows에서 이번에 사용한 테스트 전용 컴파일러 준비 명령:
+실행 검증에는 C99 컴파일러가 필요합니다. uv의 test 그룹으로 Zig까지 설치할 수 있습니다.
 
 ```powershell
-.venv\Scripts\python -m pip install --target .venv/c-tools ziglang==0.15.2
+python -m uv sync --locked --group test
+python -m uv run --locked --group test python -m unittest discover -s tests -v
 ```
+
+현재 Python 환경의 ziglang 패키지를 우선 사용하며, 기존 `.venv/c-tools/ziglang/zig.exe`와
+PATH의 Zig/GCC/Clang도 계속 지원합니다. 없으면 C 실행 테스트만 skip됩니다.
+pip 사용 시 `.venv\Scripts\python -m pip install ziglang==0.15.2`로도 준비할 수 있습니다.
 
 오프라인 PC에는 해당 OS용 컴파일러도 미리 준비해야 합니다. 테스트 실행 중 다운로드는
 수행하지 않습니다. 빌드 및 캐시는 build/에 저장되며 C/H 입력 파일을 수정하지 않습니다.

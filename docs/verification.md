@@ -1,16 +1,16 @@
 # 현재 범위 검증 결과
 
-2026-11-07, Windows x64 / Python 3.14.3 / Zig 0.15.2 C 컴파일러 환경에서 검증했다.
+최근 검증: 2026-11-08, Windows x64 / Python 3.14.3 / uv 0.13.7 / Zig 0.15.2.
 
 ```powershell
-.venv\Scripts\python -m unittest discover -s tests -v
-.venv\Scripts\python -m pip check
+python -m uv run --offline --locked --group test --cache-dir build/uv-cache python -m unittest discover -s tests -v
+python -m uv lock --check --offline --cache-dir build/uv-cache
 git diff --check
 ```
 
 | 검증 | 결과 |
 |---|---|
-| 환경 테스트 | 4개 통과 |
+| 환경·설치된 GUI 명령 테스트 | 5개 통과 |
 | 가상 AUTOSAR 구조·C 실행 테스트 | 6개 통과 |
 | 스캐너 단위 테스트 | 11개 통과 |
 | 파서 단위·샘플 검증 | 11개 통과 |
@@ -32,9 +32,17 @@ git diff --check
 | 구조체 6함수 경로·출력 인수·실제 Tk·예제 DB·원본 보존 | 7개 통과 |
 | 단계 안내·선택별 버튼·근거 요약·최소 배치·분할 위치 보존 | 5개 통과 |
 | 기준 소스 고정·단계 코드 전환·다른 파일 위치 선택·복원 | 5개 통과 |
-| 전체 unittest | 170개 통과, 실패·skip 없음 |
+| 전체 unittest | 171개 통과, 실패·skip 없음 |
 | 위 C 실행 테스트 안의 시나리오 | 기존 12개 + 확장 192개 + 조건 6개 + 구조체 6개 = 216개 통과 |
 | 의존성·diff 검사 | 통과 |
+
+uv 검증은 기존 .venv와 별개인 build/uv-online-check에서 패키지와 전용 캐시를 준비한 뒤,
+새 build/uv-offline-check를 `--offline --locked --group test`로 설치해 전체 테스트를 실행했다.
+UV_PROJECT_ENVIRONMENT로 검증 환경을 지정했으며 C 실행은 그 환경의 ziglang 모듈을 사용했다.
+실행 전용 build/uv-runtime-check에서는 test 그룹 없이 오프라인 설치 후 Tkinter·SQLite·파서 import,
+GUI 진입점 로딩과 Zig 미설치를 확인했다. uv.lock 일치 검사와 Windows GUI 실행 파일 생성도 확인했다.
+새 설정의 패키지 설치·테스트는 Windows x64 / Python 3.14.3에서 검증했다. 다른 OS나 Python 버전의
+잠금 파일 해석·설치·GUI 실행은 이번에 실행하지 않았다. [uv 사용법](uv.md)을 참고한다.
 
 기준/단계 코드 검증은 실제 Tk에서 여러 파일을 건너는 RTE·반환값·전역 쓰기 경로를 사용한다.
 가운데 소스의 내용·스크롤·강조·헤더가 이동 전후 같은지, 오른쪽은 후보 선택·조사 이동·이력 열람·뒤로 가기에

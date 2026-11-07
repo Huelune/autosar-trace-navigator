@@ -26,6 +26,7 @@ examples/                    저장된 사용 예제 DB와 현재 경로용 DB �
 docs/architecture.md         계층 설계와 후속 단계
 AGENTS.md                    개발 및 테스트 규칙
 pyproject.toml               패키지 및 파서 의존성
+uv.lock                      실행·테스트 패키지 버전과 배포 파일 해시
 ```
 
 ## 환경 구성 (PowerShell)
@@ -33,18 +34,32 @@ pyproject.toml               패키지 및 파서 의존성
 Python 3.11–3.14를 사용합니다. SQLite와 Tkinter는 Python 배포판에 포함된
 기능을 사용하므로 별도 pip 패키지를 설치하지 않습니다. Python 설치 시 Tcl/Tk를 포함하세요.
 
+프로젝트 루트에서 uv를 설치하고 필요한 패키지를 동기화합니다.
+
 ```powershell
-python -m venv .venv
-.venv\Scripts\python -m pip install -e .
-.venv\Scripts\python -m unittest discover -s tests -v
+python -m pip install --user uv
+python -m uv sync --locked
 ```
+
+`uv`가 PATH에 있다면 `python -m uv` 대신 `uv`를 사용할 수 있습니다. 가상환경 활성화는 필요 없습니다.
+기본 설치는 tree-sitter와 C 문법 패키지를 포함합니다. 전체 테스트용 Zig 컴파일러까지 설치하려면:
+
+```powershell
+python -m uv sync --locked --group test
+python -m uv run --locked --group test python -m unittest discover -s tests -v
+```
+
+기존 `.venv`의 다른 패키지를 유지할 때는 sync에 `--inexact`를 추가하세요.
+Python 자동 다운로드는 비활성화했습니다. Tcl/Tk가 포함된 Python을 먼저 준비하세요.
+[설치·실행·오프라인 사용법](docs/uv.md)을 참고하세요. 기존 pip 설치도 계속 지원합니다.
 
 ## GUI 실행
 
 ```powershell
-.venv\Scripts\python -m autosar_trace_navigator
+python -m uv run --locked autosar-trace-navigator
 ```
 
+같은 실행을 `python -m uv run --locked python -m autosar_trace_navigator`로 할 수도 있습니다.
 루트 선택 → 파일/폴더 범위 지정·분석 → 함수 검색·목표 분기 선택 → 조사 이유 입력 → 호출/RTE 후보 조사 →
 SQLite 저장·복원을 지원합니다. [GUI 사용법](docs/gui.md)을 참고하세요.
 `pedal → 60`처럼 변수 목표를 고정하고 **값 출처**에서 공급자·반환값·테스트 입력 위치를
@@ -89,7 +104,7 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 170개와
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 171개와
 C 시나리오 216개(기존 12개 + 확장 192개 + 실행 조건 6개 + 구조체 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
 
 **실행 조건** 탭에서는 값을 만드는 코드의 조건 변수를 별도 하위 조사로 따라갑니다.
@@ -111,6 +126,9 @@ extern 등 외부 연결 이름의 전역을 CT 제어 후보로 표시하며 st
 GUI에서도 호출 후보와 RTE 공급자 후보를 별도 탭으로 표시합니다.
 
 ## 오프라인 환경 구성
+
+[uv 오프라인 준비](docs/uv.md#오프라인-실행)에서 캐시를 준비하고 `--offline`으로 실행할 수 있습니다.
+아래는 별도 PC에 wheelhouse를 전달하는 기존 pip 방식입니다.
 
 인터넷 연결이 가능한 동일 OS/아키텍처/Python 버전의 준비 환경에서:
 
