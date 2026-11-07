@@ -58,7 +58,7 @@ class DataflowTests(unittest.TestCase):
                                "void A(void) { F(60); F(item->value); }")
         rows = ValueResolver(project).sources(self.at(project, "F", "value", "return value"))
         self.assertEqual({r.expression for r in rows}, {"60", "item->value"})
-        self.assertTrue(all(r.next_probe is None for r in rows))
+        self.assertEqual(next(r for r in rows if r.expression == "item->value").next_probe.expression, "item->value")
         self.assertTrue(all("call_context_not_bound" in r.uncertainty for r in rows))
 
     def test_unknown_output_alias_and_macro_are_boundaries(self):
@@ -71,13 +71,12 @@ class DataflowTests(unittest.TestCase):
         self.assertEqual(argument.next_probe.expression, "raw")
         self.assertIn("call_transformation_not_resolved", argument.uncertainty)
 
-    def test_member_target_rejected_and_unrelated_member_write_not_matched(self):
+    def test_member_target_supported_and_unrelated_member_write_not_matched(self):
         project = self.project("int F(void) { object.value=60; return value; }")
         resolver = ValueResolver(project)
         probe = self.at(project, "F", "value", "return value")
         self.assertEqual(resolver.sources(probe)[0].kind, "input_boundary")
-        with self.assertRaises(ValueError):
-            resolver.sources(ValueProbe(probe.function_id, "object.value", probe.location))
+        self.assertIn("60", [r.expression for r in resolver.sources(ValueProbe(probe.function_id, "object.value", probe.location))])
 
     def test_missing_rte_producer_is_explicit(self):
         project = self.project("int F(void) { int pedal=0; Rte_Read_Pedal_Percent(&pedal); if (pedal>=60) return 1; return 0; }")

@@ -206,7 +206,9 @@ class Workbench:
         if self.project.functions_by_id.get(step.function.id) != step.function:
             return ()
         sources = self.project.value_resolver.sources(step.probe)
-        requirements = tuple(reason for reason in step.uncertainty if reason.startswith("execution_requirement_"))
+        requirements = tuple(reason for reason in step.uncertainty if reason.startswith("execution_requirement_")
+                             or reason in {"object_origin_not_member_value", "pointer_value_not_pointee_control",
+                                           "member_type_layout_not_verified"})
         return tuple(InvestigationCandidate(
             self.project.functions_by_id.get(source.function_id), f"{source.kind}: {source.expression}",
             "rte_data" if "name_only_connection" in source.uncertainty else "value", source.location,

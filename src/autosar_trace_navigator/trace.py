@@ -3,9 +3,9 @@
 from dataclasses import dataclass, replace
 from typing import Literal
 from uuid import uuid4
-import re
 
 from .models import Branch, FunctionDefinition, SourceRange, ValueProbe
+from .access import parse_access_path, parse_return_path
 
 
 Relation = Literal["root", "call", "rte_data", "manual", "value"]
@@ -81,8 +81,10 @@ def _validate_probe(function: FunctionDefinition, probe: ValueProbe) -> None:
     _validate_site(function, probe.location)
     if probe.function_id != function.id or probe.kind not in {"variable", "return"}:
         raise ValueError("Invalid value probe owner/kind")
-    if probe.kind == "variable" and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", probe.expression):
-        raise ValueError("단순 변수 이름을 입력하세요.")
+    if probe.kind == "variable" and parse_access_path(probe.expression) is None:
+        raise ValueError("변수 또는 지원하는 구조체 멤버 경로를 입력하세요.")
+    if probe.kind == "return" and parse_return_path(probe.expression) is None:
+        raise ValueError("Invalid return/member projection")
     _require_text(probe.expression)
 
 

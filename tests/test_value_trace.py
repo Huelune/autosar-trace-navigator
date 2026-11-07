@@ -71,7 +71,7 @@ class ValueTraceTests(unittest.TestCase):
         before = workbench.session
         location = before.variable_goal.location
         for operation in (
-            lambda: workbench.inspect_variable("object.pedal", location),
+            lambda: workbench.inspect_variable("object[0].pedal", location),
             lambda: workbench.record_location(replace(location, path=ROOT / "other.c")),
             lambda: workbench.record_location(replace(location, start_byte=99999, end_byte=99999)),
         ):

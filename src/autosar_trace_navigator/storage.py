@@ -9,6 +9,7 @@ from types import TracebackType
 
 from .models import Branch, FunctionDefinition, SourceRange, ValueProbe
 from .trace import TraceSession, TraceStep, VariableGoal, validate_session
+from .access import parse_access_path
 
 
 APPLICATION_ID = 0x41544E56
@@ -31,6 +32,20 @@ def _encode_path(value: object) -> str:
     raise TypeError(f"Unsupported snapshot value: {type(value).__name__}")
 
 
+def _uses_member_paths(session: TraceSession) -> bool:
+    paths = [p for step in session.steps if (p := step.probe) is not None]
+    if any(p.kind == "return" and p.expression != "$return" for p in paths):
+        return True
+    expressions = [p.expression for p in paths if p.kind == "variable"]
+    if session.variable_goal is not None:
+        expressions.append(session.variable_goal.variable)
+    for expression in expressions:
+        path = parse_access_path(expression)
+        if path is not None and (path.members or path.dereference):
+            return True
+    return False
+
+
 def _decode(payload: str) -> TraceSession:
     def span(value: dict) -> SourceRange:
         return SourceRange(**{**value, "path": Path(value["path"])})
@@ -45,7 +60,7 @@ def _decode(payload: str) -> TraceSession:
     try:
         data = json.loads(payload)
         version = data.pop("format_version", 1)
-        if type(version) is not int or version not in {1, 2}:
+        if type(version) is not int or version not in {1, 2, 3}:
             raise ValueError("Unsupported trace snapshot format")
         target = data["target_branch"]
         branch = Branch(**{
@@ -66,6 +81,8 @@ def _decode(payload: str) -> TraceSession:
                                   "target_branch": branch, "steps": steps,
                                   "variable_goal": VariableGoal(**{**goal, "location": span(goal["location"])}) if goal else None})
         validate_session(session)
+        if version < 3 and _uses_member_paths(session):
+            raise ValueError("Member projections require snapshot format 3")
         return session
     except (ValueError, TypeError, KeyError, AttributeError) as error:
         raise ValueError("Invalid stored trace snapshot") from error
@@ -123,7 +140,8 @@ class TraceStore:
         validate_session(session)
         if expected_revision is not None and (type(expected_revision) is not int or expected_revision < 1):
             raise ValueError("Expected revision must be a positive integer")
-        payload = json.dumps({"format_version": 2, **asdict(session)}, default=_encode_path, ensure_ascii=False)
+        payload = json.dumps({"format_version": 3 if _uses_member_paths(session) else 2, **asdict(session)},
+                             default=_encode_path, ensure_ascii=False)
         revision = 1 if expected_revision is None else expected_revision + 1
         with self._connection:
             if expected_revision is None:

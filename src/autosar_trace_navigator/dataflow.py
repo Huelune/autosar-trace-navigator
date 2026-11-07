@@ -10,6 +10,7 @@ from tree_sitter import Language, Node, Parser
 import tree_sitter_c
 
 from .models import SourceRange, ValueProbe
+from .access import AccessPath, parse_access_path, parse_return_path
 
 if TYPE_CHECKING:
     from .workbench import ProjectSnapshot
@@ -58,6 +59,53 @@ def _name(node: Node | None) -> str | None:
             return node.text.decode("utf-8", errors="replace")
         node = node.child_by_field_name("declarator")
     return None
+
+
+def _unwrap(node: Node) -> Node:
+    while node.type in {"parenthesized_expression", "cast_expression"}:
+        child = node.child_by_field_name("value") or next(iter(node.named_children), None)
+        if child is None:
+            break
+        node = child
+    return node
+
+
+def _access(node: Node | None) -> AccessPath | None:
+    if node is None:
+        return None
+    node = _unwrap(node)
+    if node.type == "identifier":
+        return AccessPath(node.text.decode())
+    if node.type == "pointer_expression" and node.child_by_field_name("operator").text == b"*":
+        base = _access(node.child_by_field_name("argument"))
+        return AccessPath(base.root, dereference=True) if base and not base.members and not base.dereference else None
+    if node.type == "field_expression":
+        base = _access(node.child_by_field_name("argument"))
+        field = node.child_by_field_name("field")
+        operator = node.child_by_field_name("operator")
+        if base and field is not None and field.type == "field_identifier" and operator is not None:
+            op = operator.text.decode()
+            if base.dereference:
+                if op != ".":
+                    return None
+                return AccessPath(base.root, (("->", field.text.decode()),))
+            return AccessPath(base.root, (*base.members, (op, field.text.decode())))
+    return None
+
+
+def _input_nodes(node: Node) -> Iterator[Node]:
+    """Yield maximal object accesses, never just the a inside b.a or table[i]."""
+    if node.type in {"identifier", "field_expression", "subscript_expression", "pointer_expression"}:
+        yield node
+        return
+    if node.type == "call_expression":
+        arguments = node.child_by_field_name("arguments")
+        if arguments:
+            for child in arguments.named_children:
+                yield from _input_nodes(child)
+        return
+    for child in node.named_children:
+        yield from _input_nodes(child)
 
 
 class ValueResolver:
@@ -163,6 +211,69 @@ class ValueResolver:
                                          "earlier_exit_loop_switch_not_resolved", "condition_satisfiability_not_proven")))))
         return tuple(requirements)
 
+    def _expression_sources(self, expression: Node, owner: str, kind: str, site: SourceRange,
+                            extra: tuple[str, ...] = ()) -> tuple[ValueSource, ...]:
+        result = []
+
+        def add(destination: str, source_kind: str, text: str, location: SourceRange,
+                next_probe: ValueProbe | None = None, extra: tuple[str, ...] = ()) -> None:
+            flags = tuple(dict.fromkeys((*self.project.functions_by_id[owner].uncertainty,
+                                        "value_source_candidate", "control_flow_not_proven",
+                                        "alias_and_scope_not_resolved", *extra)))
+            result.append(ValueSource(destination, source_kind, text, location, next_probe, flags))
+
+        original = expression.text.decode("utf-8", errors="replace")
+        while expression.type in {"parenthesized_expression", "cast_expression"}:
+            child = expression.child_by_field_name("value")
+            if child is None:
+                child = next((c for c in expression.named_children if c.type != "comment"), None)
+            if child is None:
+                break
+            expression = child
+        point = self._location(self.project.functions_by_id[owner].location.path, expression)
+        access = _access(expression)
+        if access is not None:
+            add(owner, kind, original, site, ValueProbe(owner, access.expression, point), extra)
+        elif expression.type in {"number_literal", "char_literal", "string_literal", "true", "false", "null"}:
+            add(owner, "constant", original, site, extra=(*extra, "constant_source_not_constraint_solution"))
+        elif expression.type == "call_expression":
+            callee = expression.child_by_field_name("function")
+            name = callee.text.decode() if callee is not None and callee.type == "identifier" else None
+            calls = self.project.calls_by_owner.get(owner, ())
+            syntax = next((c for c in calls if c.location.start_byte == expression.start_byte), None)
+            matches = self.project.functions_by_name.get(name, ()) if syntax and syntax.kind == "direct_candidate" else ()
+            for destination in matches:
+                add(destination.id, "return_value", original, site,
+                    ValueProbe(destination.id, "$return", destination.location, "return"),
+                    (*extra, "name_only_call_candidate", "call_context_not_bound"))
+            if not matches:
+                add(owner, "unresolved_call", original, site,
+                    extra=(*extra, "macro_or_external_call_not_resolved"))
+            # For macros/unknown calls, expose argument variables without expanding their meaning.
+            if not matches:
+                arguments = expression.child_by_field_name("arguments")
+                if arguments is not None:
+                    for argument in arguments.named_children:
+                        argument_path = _access(argument)
+                        if argument_path is not None:
+                            add(owner, "call_argument", argument_path.expression, site,
+                                ValueProbe(owner, argument_path.expression, self._location(point.path, argument)),
+                                (*extra, "call_transformation_not_resolved"))
+        else:
+            add(owner, "expression", original, site, extra=(*extra, "expression_not_inverted"))
+            # Compound member/pointer expressions are boundaries, not same-spelled local identifiers.
+            if expression.type in {"binary_expression", "unary_expression", "conditional_expression"}:
+                seen = set()
+                for child in _input_nodes(expression):
+                    child_path = _access(child)
+                    if child_path is not None and child_path.expression not in seen:
+                        seen.add(child_path.expression)
+                        add(owner, "expression_operand", child_path.expression, site,
+                            ValueProbe(owner, child_path.expression, self._location(point.path, child)),
+                            (*extra, "expression_not_inverted"))
+
+        return tuple(result)
+
     def sources(self, probe: ValueProbe) -> tuple[ValueSource, ...]:
         """Find source candidates for a simple variable or all returns of a function."""
         function = self.project.functions_by_id.get(probe.function_id)
@@ -173,8 +284,12 @@ class ValueResolver:
             raise ValueError("추적 위치가 함수 범위 밖입니다.")
         if probe.kind not in {"variable", "return"}:
             raise ValueError("지원하지 않는 값 추적 종류입니다.")
-        if probe.kind == "variable" and not re.fullmatch(r"[A-Za-z_][A-Za-z0-9_]*", probe.expression):
-            raise ValueError("현재 버전은 단순 변수 이름만 직접 추적합니다.")
+        access = parse_access_path(probe.expression) if probe.kind == "variable" else parse_return_path(probe.expression)
+        if access is None:
+            raise ValueError("지원하는 변수·멤버 경로 또는 반환값 probe가 필요합니다.")
+        if access.members or access.dereference:
+            from .structflow import member_sources
+            return member_sources(self, probe, access)
         node = self._function(function.id)
         path = function.location.path
         result = []
@@ -188,56 +303,7 @@ class ValueResolver:
 
         def expression_sources(expression: Node, owner: str, kind: str, site: SourceRange,
                                extra: tuple[str, ...] = ()) -> None:
-            original = expression.text.decode("utf-8", errors="replace")
-            while expression.type in {"parenthesized_expression", "cast_expression"}:
-                child = expression.child_by_field_name("value")
-                if child is None:
-                    child = next((c for c in expression.named_children if c.type != "comment"), None)
-                if child is None:
-                    break
-                expression = child
-            point = self._location(self.project.functions_by_id[owner].location.path, expression)
-            if expression.type == "identifier":
-                add(owner, kind, original, site, ValueProbe(owner, expression.text.decode(), point), extra)
-            elif expression.type in {"number_literal", "char_literal", "string_literal", "true", "false", "null"}:
-                add(owner, "constant", original, site, extra=(*extra, "constant_source_not_constraint_solution"))
-            elif expression.type == "call_expression":
-                callee = expression.child_by_field_name("function")
-                name = callee.text.decode() if callee is not None and callee.type == "identifier" else None
-                calls = self.project.calls_by_owner.get(owner, ())
-                syntax = next((c for c in calls if c.location.start_byte == expression.start_byte), None)
-                matches = self.project.functions_by_name.get(name, ()) if syntax and syntax.kind == "direct_candidate" else ()
-                for destination in matches:
-                    add(destination.id, "return_value", original, site,
-                        ValueProbe(destination.id, "$return", destination.location, "return"),
-                        (*extra, "name_only_call_candidate", "call_context_not_bound"))
-                if not matches:
-                    add(owner, "unresolved_call", original, site,
-                        extra=(*extra, "macro_or_external_call_not_resolved"))
-                # For macros/unknown calls, expose argument variables without expanding their meaning.
-                if not matches:
-                    arguments = expression.child_by_field_name("arguments")
-                    if arguments is not None:
-                        for argument in arguments.named_children:
-                            if argument.type == "identifier":
-                                add(owner, "call_argument", argument.text.decode(), site,
-                                    ValueProbe(owner, argument.text.decode(), self._location(point.path, argument)),
-                                    (*extra, "call_transformation_not_resolved"))
-            else:
-                add(owner, "expression", original, site, extra=(*extra, "expression_not_inverted"))
-                # Compound member/pointer expressions are boundaries, not same-spelled local identifiers.
-                if expression.type in {"binary_expression", "unary_expression", "conditional_expression"}:
-                    seen = set()
-                    for child in _walk(expression):
-                        if (child.type == "identifier" and child.text not in seen
-                                and not (child.parent.type == "call_expression"
-                                         and child.parent.child_by_field_name("function") == child)
-                                and not any(ancestor.type in {"field_expression", "pointer_expression", "subscript_expression"}
-                                            for ancestor in _ancestors(child, expression))):
-                            seen.add(child.text)
-                            add(owner, "expression_operand", child.text.decode(), site,
-                                ValueProbe(owner, child.text.decode(), self._location(point.path, child)),
-                                (*extra, "expression_not_inverted"))
+            result.extend(self._expression_sources(expression, owner, kind, site, (*common, *extra)))
 
         if probe.kind == "return":
             for current in _walk(node):
@@ -246,7 +312,7 @@ class ValueResolver:
                     if expression is not None:
                         expression_sources(expression, function.id, "return", self._location(path, current))
         else:
-            variable = probe.expression
+            variable = access.root
             locals_found = False
             for current in _walk(node):
                 if current.type in {"init_declarator", "parameter_declaration", "declaration"}:
