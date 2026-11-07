@@ -10,6 +10,7 @@ import tkinter as tk
 from tkinter import filedialog, messagebox, simpledialog, ttk
 
 from .storage import TraceStore
+from .trace import TraceStep
 from .models import FunctionDefinition, SourceRange, ValueProbe
 from .access import parse_access_path
 from .ui_style import configure_workspace
@@ -96,6 +97,13 @@ class Navigator(ttk.Frame):
         self.page_offset = 0
         self.last_query = ""
         self.picked_location: SourceRange | None = None
+        self.source_location: SourceRange | None = None
+        self.preview_location: SourceRange | None = None
+        self.preview_first_line = 1
+        self.preview_prefix_lines = 0
+        self.reference_key = None
+        self.browsed_function_id: str | None = None
+        self.preview_focus_id: str | None = None
         self.pack(fill="both", expand=True)
         root.title("AUTOSAR Trace Navigator")
         root.geometry("1500x950")
@@ -266,7 +274,7 @@ class Navigator(ttk.Frame):
             button.configure(style="Accent.TButton")
             button.pack(side="bottom", fill="x", pady=(3, 0), before=table.master)
             self.follow_buttons[table] = button
-        self.preview_tab = ttk.LabelFrame(preview_area, text="이동 전 비교 — 후보 / 이력 코드", padding=3)
+        self.preview_tab = ttk.LabelFrame(preview_area, text="단계별 코드 — 현재 조사 / 선택 후보 / 이력", padding=3)
         self.preview_tab.pack(fill="both", expand=True, pady=3)
         self.preview_label = tk.StringVar(value="행을 선택해 코드를 비교하세요. 현재 소스와 조사 위치는 유지됩니다.")
         preview_label = ttk.Label(self.preview_tab, textvariable=self.preview_label, width=1, anchor="w")
@@ -277,6 +285,9 @@ class Navigator(ttk.Frame):
         self.preview_summary_label.pack(fill="x", pady=(0, 2))
         self.candidate_source = _text(self.preview_tab, 5)
         self.candidate_source.tag_configure("location", background="#fff0b3", foreground="#111111")
+        self.candidate_source.tag_configure("tracked_value", background="#cce8ff", foreground="#003b66")
+        self.candidate_source.bind("<ButtonRelease-1>", lambda e: self.capture_source_selection(e, preview=True))
+        self.candidate_source.bind("<Double-Button-1>", lambda e: self.select_source_identifier(e, preview=True))
         self.inspection_notebook = ttk.Notebook(history_area)
         self.inspection_notebook.pack(fill="both", expand=True)
         history_tab, detail_tab, context_tab = (ttk.Frame(self.inspection_notebook) for _ in range(3))
@@ -349,13 +360,28 @@ class Navigator(ttk.Frame):
         state(self.toolbar_buttons["세션 저장"], manager is not None)
         state(self.toolbar_buttons["뒤로"], manager is not None and manager.current_step.parent_id is not None)
         state(self.start_button, bool(self.functions.selection() and self.branches.selection()))
-        state(self.record_button, manager is not None and self.picked_location is not None)
+        state(self.record_button, self.selection_is_current())
+        item = self.variable_inputs.get(self.variable.get())
+        supported = item.supported if item else parse_access_path(self.variable.get()) is not None
+        state(self.inspect_button, supported and self.selection_is_current())
         for table, button in self.follow_buttons.items():
             selected = table.selection()
             candidate = self.candidate_map.get(selected[0]) if selected else None
             state(button, candidate is not None and candidate.function is not None)
         selected = self.history.selection()
         state(self.history_button, bool(manager and selected and selected[0] != manager.current_step.id))
+
+    def selection_is_current(self) -> bool:
+        """A preview selection belongs to an active step only after explicit investigation."""
+        manager, site = self.workbench.manager, self.picked_location
+        if manager is None or site is None:
+            return False
+        function = manager.current_step.function
+        project = self.workbench.project
+        if project is None or project.functions_by_id.get(function.id) != function:
+            return False
+        return (function.location.path == site.path and function.location.start_byte <= site.start_byte
+                and site.end_byte <= function.location.end_byte)
 
     def update_workflow(self) -> None:
         """Offer one next step without treating candidates as verified execution."""
@@ -400,7 +426,7 @@ class Navigator(ttk.Frame):
         supported = selected.supported if selected else parse_access_path(self.variable.get()) is not None
         if objective:
             self.goal_controls.pack_forget()
-            help_text = "현재 조사할 값 · 최초 목표는 상단에 유지됩니다."
+            help_text = "현재 값 선택: 오른쪽 단계 코드 · 최초 목표 유지"
         else:
             self.goal_controls.pack(fill="x", pady=3, before=self.inspect_button.master)
             help_text = ("조건에 값이 여러 개 있습니다. 추적할 변수를 선택하고 원하는 값을 입력하세요."
@@ -413,7 +439,7 @@ class Navigator(ttk.Frame):
             help_text += " 포인터 대상은 별칭·호출 근거로 확인할 후보입니다."
         self.input_help.set(help_text)
         self.goal_button.state(["!disabled"] if supported and not self.busy else ["disabled"])
-        self.inspect_button.state(["!disabled"] if supported and not self.busy and self.workbench.manager else ["disabled"])
+        self.inspect_button.state(["!disabled"] if supported and not self.busy and self.selection_is_current() else ["disabled"])
         self.update_workflow()
 
     def choose_branch_input(self) -> None:
@@ -491,6 +517,9 @@ class Navigator(ttk.Frame):
 
     def render_project(self) -> None:
         self.picked_location = None
+        self.source_location = None
+        self.reference_key = None
+        self.browsed_function_id = None
         self.functions.delete(*self.functions.get_children())
         self.branches.delete(*self.branches.get_children())
         _set_text(self.source, "함수 또는 분기를 선택하면 분석 시점의 소스를 표시합니다.")
@@ -564,19 +593,26 @@ class Navigator(ttk.Frame):
         manager = self.workbench.manager
         location = (manager.current_step.selected_location
                     if manager and manager.current_step.function == function else None)
-        self.show_source(location or function.location)
+        if self.browsed_function_id != function.id:
+            self.show_source(location or function.location)
+            self.browsed_function_id = function.id
         self.update_workflow()
 
     def show_source(self, location: SourceRange) -> None:
+        """Change the reference source only for explicit browsing or a new session/snapshot."""
         if self.source_focus_id is not None:
             self.root.after_cancel(self.source_focus_id)
             self.source_focus_id = None
         self.source_notebook.select(0)
         project = self.workbench.project
+        self.source_location = location
+        self.browsed_function_id = next((fn.id for fn in project.functions
+                                        if fn.location.path == location.path
+                                        and fn.location.start_byte <= location.start_byte < fn.location.end_byte), None) if project else None
         data = next((data for path, data in project.sources if path == location.path), None) if project else None
         self.picked_location = location if data is not None else None
         self.update_actions()
-        self.source_label.set(f"현재 소스 · {location.path.name}:{location.start_line} · 읽기 전용")
+        self.source_label.set(f"현재 소스 (기준 고정) · {location.path.name}:{location.start_line} · 읽기 전용")
         if data is None:
             _set_text(self.source, "이 위치의 분석 소스가 없습니다. 해당 소스 폴더를 분석하세요.\n"
                       "복원한 위치는 저장 시점의 메타데이터입니다.")
@@ -602,56 +638,72 @@ class Navigator(ttk.Frame):
                 self.source.see(f"{location.start_line}.0")
         self.source_focus_id = self.root.after_idle(focus_after_layout)
 
-    def select_source_identifier(self, event: tk.Event) -> str | None:
+    def select_source_identifier(self, event: tk.Event, *, preview: bool = False) -> str | None:
         """Select a whole syntax access path, including b.a and (*p).a."""
-        index = self.source.index(f"@{event.x},{event.y}")
-        self.source.tag_remove("sel", "1.0", "end")
-        self.pick_source_position(index)
+        widget = self.candidate_source if preview else self.source
+        index = widget.index(f"@{event.x},{event.y}")
+        widget.tag_remove("sel", "1.0", "end")
+        if not self.pick_source_position(index, preview=preview):
+            return None
         if self.picked_location is None or self.workbench.project is None:
             return None
         item = self.workbench.project.value_resolver.access_at(self.picked_location)
         if item is None:
             return None
-        self.show_source(item.location)
+        self.picked_location = item.location
         data = dict(self.workbench.project.sources)[item.location.path].splitlines()
         start = item.location
         first = 7 + len(data[start.start_line - 1][:start.start_column - 1].decode("utf-8", errors="replace"))
         last = 7 + len(data[start.end_line - 1][:start.end_column - 1].decode("utf-8", errors="replace"))
-        self.source.tag_add("sel", f"{start.start_line}.{first}", f"{start.end_line}.{last}")
+        offset = self.preview_first_line - 1 - self.preview_prefix_lines if preview else 0
+        widget.tag_add("sel", f"{start.start_line - offset}.{first}", f"{start.end_line - offset}.{last}")
+        widget.tag_add("tracked_value", f"{start.start_line - offset}.{first}", f"{start.end_line - offset}.{last}")
         self.variable.set(item.expression)
         self.update_input_controls()
         return "break"
 
-    def capture_source_selection(self, event: tk.Event) -> None:
-        self.pick_source_position(self.source.index(f"@{event.x},{event.y}"))
+    def capture_source_selection(self, event: tk.Event, *, preview: bool = False) -> None:
+        widget = self.candidate_source if preview else self.source
+        self.pick_source_position(widget.index(f"@{event.x},{event.y}"), preview=preview)
 
-    def pick_source_position(self, index: str) -> None:
+    def pick_source_position(self, index: str, *, preview: bool = False) -> bool:
         """Map a numbered Text position to a byte position in the analyzed snapshot."""
-        if self.picked_location is None or self.workbench.project is None:
-            return
-        path = self.picked_location.path
+        location = self.preview_location if preview else self.source_location
+        if location is None or self.workbench.project is None:
+            return False
+        if preview and self.preview_focus_id is not None:
+            self.root.after_cancel(self.preview_focus_id)
+            self.preview_focus_id = None
+        widget = self.candidate_source if preview else self.source
+        path = location.path
         data = next(data for source_path, data in self.workbench.project.sources if source_path == path)
         lines = data.splitlines(keepends=True)
-        row, column = (int(value) for value in index.split("."))
+        display_row, column = (int(value) for value in index.split("."))
+        if (preview and display_row <= self.preview_prefix_lines
+                or display_row > int(widget.index("end-1c").split(".")[0])):
+            return False
+        offset_rows = self.preview_first_line - 1 - self.preview_prefix_lines if preview else 0
+        row = display_row + offset_rows
         if not 1 <= row <= len(lines):
-            return
+            return False
         # The seven-character line-number prefix is display-only. Model columns are bytes.
         line = lines[row - 1].decode("utf-8", errors="replace").rstrip("\r\n")
         byte_column = len(line[:max(0, column - 7)].encode("utf-8"))
         offset = sum(len(value) for value in lines[:row - 1]) + byte_column
         self.picked_location = SourceRange(path, row, byte_column + 1, row, byte_column + 1, offset, offset)
-        ranges = self.source.tag_ranges("sel")
+        ranges = widget.tag_ranges("sel")
         if ranges:
-            selected = self.source.get(*ranges[:2]).strip()
+            selected = widget.get(*ranges[:2]).strip()
             access = parse_access_path(selected)
             syntax = self.workbench.project.value_resolver.access_at(self.picked_location)
             if syntax and syntax.supported and (access is not None or data[syntax.location.start_byte:syntax.location.end_byte].decode("utf-8", errors="replace") == selected):
                 access = parse_access_path(syntax.expression)
             if access is not None:
                 self.variable.set(access.expression)
-                if self.source.compare(index, ">=", ranges[0]) and self.source.compare(index, "<", ranges[1]):
+                if widget.compare(index, ">=", ranges[0]) and widget.compare(index, "<", ranges[1]):
                     def position(text_index):
                         r, c = (int(value) for value in str(text_index).split("."))
+                        r += offset_rows
                         byte_column = len(lines[r - 1].decode("utf-8", errors="replace")[:max(0, c - 7)].encode("utf-8"))
                         return r, byte_column + 1, sum(len(value) for value in lines[:r - 1]) + byte_column
                     start_row, start_col, start_byte = position(ranges[0])
@@ -660,11 +712,13 @@ class Navigator(ttk.Frame):
                     if syntax and syntax.supported:
                         self.picked_location = syntax.location
                 self.update_input_controls()
-        self.source_label.set(f"선택 위치 (아직 미기록): {path.name}:{row}")
-        self.source.tag_remove("location", "1.0", "end")
-        self.source.tag_remove("tracked_value", "1.0", "end")
-        self.source.tag_add("location", f"{row}.0", f"{row}.end")
-        self.update_actions()
+        if not preview:
+            self.source_label.set(f"기준 소스 선택 위치 (아직 미기록): {path.name}:{row}")
+        widget.tag_remove("location", "1.0", "end")
+        widget.tag_remove("tracked_value", "1.0", "end")
+        widget.tag_add("location", f"{display_row}.0", f"{display_row}.end")
+        self.update_input_controls()
+        return True
 
     def selected_location(self) -> SourceRange:
         if self.picked_location is None:
@@ -729,6 +783,7 @@ class Navigator(ttk.Frame):
         self.candidate_map.clear()
         _set_text(self.detail, "후보를 선택해 근거 위치와 불확실성을 확인하세요.")
         _set_text(self.candidate_source, "후보 또는 이력을 선택하세요.")
+        self.preview_location = None
         self.preview_label.set("코드는 현재 분석 시점의 읽기 전용 스냅샷입니다.")
         self.preview_summary.set("행을 선택해 비교하세요. 열람만으로 조사 위치나 이력이 바뀌지 않습니다.")
         manager = self.workbench.manager
@@ -840,14 +895,22 @@ class Navigator(ttk.Frame):
             self.history.insert("", "end", iid=step.id,
                                 values=(marker + paths[step.id] + " · " + step.relation, step.function.name, label, step.reason, subject))
         self.history.configure(displaycolumns=("현재 / 관계", "조사 변수", "함수", "선택 위치"))
-        current = manager.current_step.function
+        reference_key = (manager.session.id, id(self.workbench.project))
+        new_reference = self.reference_key != reference_key
+        if new_reference:
+            self.functions.selection_remove(*self.functions.selection())
         self.render_function_page(self.page_offset)
-        if self.functions.exists(current.id):
-            self.functions.selection_set(current.id)
-            self.functions.see(current.id)
-            self.browse_function()
-        self.show_source(manager.current_step.selected_location or current.location)
-        self.source_notebook.select(0)
+        if new_reference:
+            self.reference_key = reference_key
+            self.show_source(objective.location if objective else target.location)
+            if self.functions.exists(target.function_id):
+                self.functions.selection_set(target.function_id)
+                self.browse_function()
+        step = manager.current_step
+        site = step.selected_location or step.function.location
+        project = self.workbench.project
+        self.picked_location = site if project and any(path == site.path for path, _ in project.sources) else None
+        self.display_step(step, current=True)
         if self.history_focus_id is not None:
             self.root.after_cancel(self.history_focus_id)
         step_id = manager.session.current_step_id
@@ -891,10 +954,17 @@ class Navigator(ttk.Frame):
         self.update_actions()
 
     def show_preview(self, function: FunctionDefinition | None, location: SourceRange, heading: str) -> None:
-        """Display bounded snapshot code without changing the active selection or session."""
+        """Display the selected function without changing the reference source or trace."""
+        if self.preview_focus_id is not None:
+            self.root.after_cancel(self.preview_focus_id)
+            self.preview_focus_id = None
+        self.preview_location = None
         project = self.workbench.project
         name = function.name if function else "대상 함수 미확인"
         self.preview_label.set(f"{heading} | {name} · {location.path.name}:{location.start_line}")
+        if project is None:
+            _set_text(self.candidate_source, "현재 분석 범위에 해당 소스가 없습니다. 소스 폴더를 다시 분석하세요.")
+            return
         if function is not None and (project is None or project.functions_by_id.get(function.id) != function):
             _set_text(self.candidate_source, "저장된 함수와 현재 분석 정보가 일치하지 않아 코드를 표시할 수 없습니다.")
             return
@@ -908,15 +978,32 @@ class Navigator(ttk.Frame):
                                  if fn.location.path == location.path
                                  and fn.location.start_byte <= location.start_byte <= fn.location.end_byte), None)
         if owner is not None:
-            first = max(first, owner.location.start_line)
-            last = min(last, owner.location.end_line)
+            first = owner.location.start_line
+            last = owner.location.end_line
         lines = data.decode("utf-8", errors="replace").splitlines()
         prefix = "" if function is not None else "대상 함수 미확인 — 호출 근거 주변 코드만 표시합니다.\n"
         _set_text(self.candidate_source, prefix + "\n".join(
             f"{row:5}  {lines[row - 1]}" for row in range(first, min(last, len(lines)) + 1)))
+        self.preview_location = location
+        self.preview_first_line = first
+        self.preview_prefix_lines = int(bool(prefix))
         row = location.start_line - first + 1 + bool(prefix)
         self.candidate_source.tag_add("location", f"{row}.0", f"{row}.end")
+        tracked = project.value_resolver.access_at(location)
+        if tracked and tracked.supported and tracked.location.start_line == tracked.location.end_line:
+            site = tracked.location
+            line = data.splitlines()[site.start_line - 1]
+            start = 7 + len(line[:site.start_column - 1].decode("utf-8", errors="replace"))
+            end = 7 + len(line[:site.end_column - 1].decode("utf-8", errors="replace"))
+            tracked_row = site.start_line - first + 1 + bool(prefix)
+            self.candidate_source.tag_add("tracked_value", f"{tracked_row}.{start}", f"{tracked_row}.{end}")
         self.candidate_source.see(f"{row}.0")
+
+        def focus_preview_after_layout() -> None:
+            self.preview_focus_id = None
+            if not self.closed and self.preview_location == location:
+                self.candidate_source.see(f"{row}.0")
+        self.preview_focus_id = self.root.after_idle(focus_preview_after_layout)
 
     def preview_history(self, event: tk.Event | None = None) -> None:
         selected = self.history.selection()
@@ -925,14 +1012,22 @@ class Navigator(ttk.Frame):
             self.update_actions()
             return
         step = next(s for s in manager.session.steps if s.id == selected[0])
+        self.display_step(step, current=False)
+        self.update_actions()
+
+    def display_step(self, step: TraceStep, *, current: bool) -> None:
+        """Keep current, candidate and history code in the same independent stage pane."""
         site = step.selected_location
         evidence = step.evidence
         subject = _probe_text(step.probe, "종점 / 함수 조사")
         _set_text(self.detail, f"조사 대상: {step.function.name} :: {subject}\n{step.reason}\n"
                   + (f"선택 위치: {site.path}:{site.start_line}\n" if site else "선택 위치: 미기록\n")
                   + (f"이동 근거: {evidence.path}:{evidence.start_line}\n" if evidence else "")
+                  + ("CT 전역 제어 후보: 실제 CT 접근성과 설정할 값은 확인이 필요합니다.\n"
+                     if "ct_accessibility_not_verified" in step.uncertainty and step.probe is None else "")
                   + "\n".join(step.uncertainty))
-        self.show_preview(step.function, site or step.function.location, "이력 코드 — 이동은 별도 버튼")
+        self.show_preview(step.function, site or step.function.location,
+                          "현재 조사 단계: " + subject if current else "이력 코드 — 이동은 별도 버튼")
         reason = " ".join(step.reason.split())
         self.preview_summary.set("조사 이유: " + reason[:110] + ("…" if len(reason) > 110 else ""))
         self.update_actions()
@@ -1015,6 +1110,9 @@ class Navigator(ttk.Frame):
                 self.root.after_cancel(self.history_focus_id)
                 self.history_focus_id = None
             self.executor.shutdown(wait=False, cancel_futures=True)
+            if self.preview_focus_id is not None:
+                self.root.after_cancel(self.preview_focus_id)
+                self.preview_focus_id = None
             if getattr(self, "layout_id", None) is not None:
                 self.root.after_cancel(self.layout_id)
                 self.layout_id = None

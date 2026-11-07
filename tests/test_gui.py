@@ -428,9 +428,10 @@ class GuiTests(unittest.TestCase):
                 self.app.follow(self.app.values)
             self.root.update()
         location = self.app.workbench.manager.current_step.selected_location
-        box = self.app.source.bbox(f"{location.start_line}.0")
+        row = location.start_line - self.app.preview_first_line + 1
+        box = self.app.candidate_source.bbox(f"{row}.0")
         self.assertIsNotNone(box)
-        self.assertLessEqual(box[1] + box[3], self.app.source.winfo_height())
+        self.assertLessEqual(box[1] + box[3], self.app.candidate_source.winfo_height())
         # A newer user click must win over a still-pending viewport callback.
         self.app.show_source(location)
         self.app.pick_source_position("34.12")
