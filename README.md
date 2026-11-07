@@ -8,12 +8,16 @@ AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보�
 이름 기반 RTE Read/Write 공급·소비 후보 분석과 Tkinter GUI도 구현했습니다.
 변수 목표값의 공급 위치 역추적, 선택 라인 이력, 이동 전 후보 코드 미리보기를 지원합니다.
 
+처음 사용한다면 **[예제 DB로 따라 하는 사용법](docs/user-guide.md)**을 읽어보세요.
+전역 입력 후보까지 찾는 4단계 예시와 중첩 실행 조건을 조사하는 10단계 예시를 제공합니다.
+
 ## 구조
 
 ```text
 src/autosar_trace_navigator/  분석·Trace·SQLite·RTE·화면 상태·Tkinter GUI
 tests/                       환경·분석·탐색 상태·저장·C 실행 검증 테스트
 test/                        가상 AUTOSAR C/H 및 C 실행 하네스
+examples/                    저장된 사용 예제 DB와 현재 경로용 DB 생성기
 docs/architecture.md         계층 설계와 후속 단계
 AGENTS.md                    개발 및 테스트 규칙
 pyproject.toml               패키지 및 파서 의존성
@@ -80,7 +84,7 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 129개와
+현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 133개와
 C 시나리오 210개(기존 12개 + 확장 192개 + 실행 조건 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
 
 **실행 조건** 탭에서는 값을 만드는 코드의 조건 변수를 별도 하위 조사로 따라갑니다.
