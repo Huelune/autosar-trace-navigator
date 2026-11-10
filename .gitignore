@@ -6,6 +6,8 @@ build/
 dist/
 wheelhouse/
 .coverage
+CLAUDE.local.md
+.claude/settings.local.json
 .branch-investigation/
 extensions/branch-investigation/node_modules/
 extensions/branch-investigation/dist/

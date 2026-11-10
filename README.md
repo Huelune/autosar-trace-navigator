@@ -2,6 +2,10 @@
 
 AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보존하는 로컬 도구.
 
+**다른 PC의 Codex·Claude Code에서 개발을 이어가려면 [개발 환경 구성](CONTRIBUTING.md)과
+[현재 작업·인수인계](docs/work/STATUS.md)를 먼저 읽으세요.** 해야 할 일은 작업 카드에,
+실제로 한 일과 검증·다음 행동은 세션별 기록에 남겨 Git으로 공유합니다.
+
 **VS Code 조사 확장 P0**는 [extensions/branch-investigation](extensions/branch-investigation/README.md)에 있습니다.
 코드 선택·이유 저장 → 조사 트리 → 상세·정확한 소스 재방문을 VS Code 안에서 제공하며 P0는 Python 없이 동작합니다.
 아래 Python/Tkinter 도구와 저장소는 그대로 유지합니다.

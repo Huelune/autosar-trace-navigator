@@ -24,6 +24,7 @@
 - parser, scanner, storage는 GUI에 의존하지 않는다. 향후 trace와 rte 계층을 독립적으로 추가한다.
 - SQLite 연결과 파일 입출력은 명시적인 작업에서만 수행한다. import 시 부작용을 만들지 않는다.
 - 사용자 요청 없이 작업 범위를 확장하거나 원격 저장소에 푸시하지 않는다.
+- VS Code 확장은 extensions/branch-investigation/의 독립 TypeScript 프로젝트다. P0는 Python을 실행하지 않으며 기존 분석 엔진 재사용은 P1 범위로 별도 승인·검증한다.
 
 ## 테스트 규칙
 - 표준 unittest를 사용한다: `.venv\Scripts\python -m unittest discover -s tests -v`.
@@ -34,8 +35,19 @@
 - 파서 구현 시 함수 정의/호출, 중첩 if/else if/else, 위치, 매크로 불확실성을 검증한다.
 - SQLite 테스트는 임시 DB를 사용하며 사용자 DB를 수정하지 않는다.
 - 각 단계에서 실제 실행한 검사와 미검증 항목을 구분하여 보고한다.
+- 확장 변경은 해당 폴더에서 npm ci 후 npm test를 실행한다. UI/저장 동작에 영향을 주면 설치된 VS Code의 npm run test:host도 실행하고 미실행 시 이유를 남긴다.
+- 작업 기록 생성기만 검증할 때는 python -m unittest discover -s tests -p test_worklog.py -v로 표준 라이브러리 테스트를 실행할 수 있다.
 
 ## 커밋 규칙
 - docs/ai/commit-convention.md를 따른다. 검증한 작업은 단계별로 자동 커밋한다.
 - 여러 커밋은 계획을 먼저 제시하고, 변경별 CHANGELOG 항목을 같은 커밋에 넣는다.
 - 관련 없는 사용자 변경은 포함하지 않는다. 사용자 요청 없이 기존 이력을 수정하거나 푸시하지 않는다.
+
+## 다른 PC·Codex·Claude Code 작업 공유
+- 환경 구성은 CONTRIBUTING.md, 작업 공유는 docs/work/README.md를 따른다.
+- 시작 시 docs/work/STATUS.md, 배정 작업 카드와 연결된 최신 세션, 실제 Git 상태·코드를 확인한다.
+- 승인된 작업에만 착수한다. 계획 카드 생성만으로 후속 구현을 승인받았다고 해석하지 않는다.
+- 작업 카드에 범위·담당·상태·최신 인계 링크를, 세션별 새 파일에 변경·실제 검증·미검증·다음 첫 행동을 기록한다.
+- 작업 종료/중단 시 기록을 갱신한다. 동시 작업은 담당 범위를 나누고 다른 도구의 세션 기록을 덮어쓰지 않는다.
+- 과거 결과를 현재 PC의 검증으로 보고하지 않는다. 로컬 커밋과 원격 공유 상태를 구분한다.
+- 공유 기록에는 가상 코드와 비민감 개발 정보만 넣는다. 고객/회사 자료·비밀키·개인 AI 메모리를 반입하지 않는다.
