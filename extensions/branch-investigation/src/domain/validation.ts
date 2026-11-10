@@ -52,4 +52,5 @@ export function validate(value: unknown): asserts value is WorkspaceDocument {
   requireValue(Number.isSafeInteger(d.visitCursor) && d.visitCursor >= -1 && d.visitCursor < d.visits.length && (d.visits.length === 0 ? d.visitCursor === -1 : d.visitCursor >= 0), '방문 커서 오류입니다.');
   if (d.currentGoalId !== undefined) { requireValue(goals.has(d.currentGoalId), '현재 목표 오류입니다.'); }
   if (d.currentStepId !== undefined) { requireValue(steps.get(d.currentStepId)?.goalId === d.currentGoalId, '현재 단계 오류입니다.'); }
+  requireValue(Buffer.byteLength(JSON.stringify(d,null,2),'utf8')<=MAX_FILE_BYTES,'조사 문서의 16 MiB 보존 한도를 초과했습니다.');
 }

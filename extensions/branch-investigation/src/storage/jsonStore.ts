@@ -16,10 +16,11 @@ export class JsonStore {
   async open(): Promise<WorkspaceDocument> {
     this.dir = await safeRecordDirectory(this.root);
     if (!this.token) {
+      requireValue(!await fs.lstat(path.join(this.dir,'recovery.lock')).then(()=>true,()=>false), '잠금 복구 작업이 진행 중입니다. 잠시 후 다시 여세요.');
       const token = id(); let handle;
       try { handle = await fs.open(this.lock, 'wx', 0o600); }
       catch (e) { if ((e as NodeJS.ErrnoException).code === 'EEXIST') { throw new Error('다른 작성 창 또는 종료된 작성자의 잠금이 있습니다. 기존 잠금을 임의 삭제하지 않습니다.'); } throw e; }
-      try { await handle.writeFile(JSON.stringify({ token, pid: process.pid, host: hostname(), createdAt: now() })); await handle.sync(); this.token = token; } finally { await handle.close(); }
+      try { await handle.writeFile(JSON.stringify({ token, pid: process.pid, host: hostname(), createdAt: now() })); await handle.sync(); this.token = token; } catch(e) { await handle.close(); await fs.unlink(this.lock).catch(()=>{}); throw e; } finally { await handle.close().catch(()=>{}); }
     }
     try { const raw = await this.bytes(this.file); const d = this.parse(raw); this.knownHash = fingerprint(raw); return clone(d); }
     catch (e) {
@@ -29,11 +30,10 @@ export class JsonStore {
       this.knownHash = undefined; return emptyDocument();
     }
   }
-  private async assertWriter(): Promise<void> { const lock = JSON.parse(await this.bytes(this.lock)); requireValue(this.token && lock.token === this.token && lock.pid === process.pid, '작성 잠금을 잃었습니다. 저장을 중단합니다.'); }
+  private async assertWriter(): Promise<void> { requireValue(await safeRecordDirectory(this.root)===this.dir,'조사 폴더가 변경됐습니다.'); const lock = JSON.parse(await this.bytes(this.lock)); requireValue(this.token && lock.token === this.token && lock.pid === process.pid, '작성 잠금을 잃었습니다. 저장을 중단합니다.'); }
   private async atomic(file: string, raw: string): Promise<void> {
     await rejectLink(file); const temp = path.join(this.dir, `.tmp-${id()}`); const h = await fs.open(temp, 'wx', 0o600);
-    try { await h.writeFile(raw, 'utf8'); await h.sync(); } finally { await h.close(); }
-    try { await this.rename(temp, file); } finally { await fs.unlink(temp).catch(() => {}); }
+    try { try { await h.writeFile(raw, 'utf8'); await h.sync(); } finally { await h.close(); } await this.rename(temp, file); } finally { await fs.unlink(temp).catch(() => {}); }
   }
   async save(value: WorkspaceDocument, expected: number): Promise<WorkspaceDocument> {
     validate(value); await this.assertWriter();
@@ -59,11 +59,15 @@ export class JsonStore {
   /** Explicit recovery only after a same-host owner is proved absent. Never terminates a process. */
   async recoverStaleLock(): Promise<void> {
     this.dir = await safeRecordDirectory(this.root); requireValue(!this.token, '현재 창이 이미 작성 잠금을 보유합니다.');
+    const guardPath=path.join(this.dir,'recovery.lock'), guard=await fs.open(guardPath,'wx',0o600);
+    try {
+    await guard.writeFile(JSON.stringify({pid:process.pid,host:hostname(),createdAt:now()}));await guard.sync();
     const raw = await this.bytes(this.lock), l = JSON.parse(raw);
     requireValue(l.host === hostname() && typeof l.token === 'string' && Number.isSafeInteger(l.pid) && l.pid > 0, '잠금 소유자를 확인할 수 없습니다.');
     let dead = false; try { process.kill(l.pid, 0); } catch (e) { dead = (e as NodeJS.ErrnoException).code === 'ESRCH'; }
     requireValue(dead, '소유 프로세스가 실행 중이거나 종료를 확인할 수 없습니다.');
     requireValue(await this.bytes(this.lock) === raw, '잠금이 변경됐습니다.'); await fs.unlink(this.lock);
+    } finally {await guard.close();await fs.unlink(guardPath);}
   }
   async close(): Promise<void> { if (this.token) { await this.assertWriter(); await fs.unlink(this.lock); this.token = undefined; } }
 }
