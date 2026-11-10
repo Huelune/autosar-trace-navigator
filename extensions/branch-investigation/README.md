@@ -1,0 +1,124 @@
+# Branch Investigation — VS Code 확장 P0
+
+선택한 C/H 코드와 **왜 선택했는지**, 최초 목표와 대체 경로를 VS Code 안에서 기록하고 재방문합니다.
+Python이나 Tkinter 창을 실행하지 않습니다. 원본 소스는 수정하지 않습니다.
+
+## 설치와 실행
+
+승인된 PC의 VS Code **1.95 이상**에서 Extensions의 `… → Install from VSIX…`로
+`branch-investigation-0.1.0.vsix`를 선택합니다. 설치 후 인터넷이나 Python 패키지는 필요하지 않습니다.
+터미널에서 설치할 수 있는 환경이라면 `code --install-extension 경로/branch-investigation-0.1.0.vsix`도 가능합니다.
+Marketplace 게시나 자동 업데이트 기능은 이 확장이 제공하지 않습니다.
+
+**하나의 신뢰한 로컬 폴더**를 열어 사용합니다. 다중 루트·원격 작업 공간·미신뢰 모드는 P0 활성 작업을 지원하지 않습니다.
+파일에 연결하지 않을 메모는 수동 스니펫에 붙여넣을 수 있습니다.
+
+## 5분 안에 확인하기
+
+1. 가상 샘플 `test/struct_paths`를 로컬 작업 폴더로 엽니다. 사용자 소스 대신 저장소의 가상 코드를 사용하세요.
+2. `consumer.c`에서 `Rte_Read_Struct_State(&b)` 또는 목표 분기 범위를 선택합니다.
+3. 우클릭 **현재 조사에 추가** 또는 C/H 편집기에서 **Ctrl+Alt+I**를 누릅니다.
+   처음이면 목표 이름·설명을 입력하고, 이 코드를 조사하는 이유를 입력합니다. 설명은 선택 항목이고 이유는 필수입니다.
+   입력 중 취소하거나 이유를 비우면 목표/단계를 부분 저장하지 않습니다.
+4. 왼쪽 Activity Bar의 **Branch Investigation** 트리에 목표와 순번 있는 단계가 나타납니다.
+   오른쪽 상세 맨 위에는 선택 이유, 그 아래에는 당시 목표와 가정·조건·관찰·결과·다음 할 일·스니펫이 보입니다.
+5. 다른 파일을 연 뒤 트리의 단계를 클릭합니다. 현재 텍스트의 지문이 맞으면 원래 파일과 정확한 범위가 열립니다.
+   파일을 바꾸거나 삭제하면 기록은 열리지만 **위치 확인 필요**로 표시하며 옛 행으로 자동 이동하지 않습니다.
+
+트리의 단계 순번과 부모·자식은 **조사 경로**입니다. 실제 Runnable/프로그램 실행 순서가 아닙니다.
+RTE Writer를 사용자가 선택해 붙였다는 사실만으로 실제 wiring·갱신 순서·분기 충족을 확정하지 않습니다.
+
+## 계속 조사하기
+
+- 다른 코드를 선택해 추가하면 현재 단계의 자식이 됩니다. **상위 조사로 이동** 후 추가하면 대체 형제 경로가 됩니다.
+- 상세 입력란에서 가정·필요 조건·도출 조건·관찰·결과·다음 할 일을 고쳐 **조사 정보 저장**을 누릅니다.
+- 상태는 **조사 중 / 확인 / 보류 / 제외**입니다. 보류·제외도 삭제하지 않습니다. ‘확인’ 자체는 CT 실측이 아닙니다.
+- 실측은 별도 **근거 추가**에서 **CT에서 사람이 확인한 실측**을 고르고 실행 라벨·UTC 관찰 시각·메모를 모두 입력합니다.
+  CT 자동 실행·커버리지 수집은 하지 않습니다. 소스 근거(사용자 기록)와 가설도 별도로 구분합니다.
+- 트리 상단 메모 아이콘 또는 **분기 조사: 수동 스니펫 붙여넣기**에서 Ctrl+V 가능한 여러 줄 입력을 열 수 있습니다.
+  전체 VS Code의 Ctrl+V를 가로채거나 클립보드를 감시하지 않습니다. 파일 미연결 상태의 한 단계로 저장합니다.
+- **이전 방문 위치 / 다음 방문 위치**는 독립 탐색 이력입니다. 상위 조사와 다르며 새 Step/분석 관계를 생성하지 않습니다.
+  뒤로 간 후 다른 곳을 방문하면 앞으로의 방문 분기만 정리합니다. 조사 단계는 계속 보존합니다.
+- 위치가 바뀌었다면 소스를 직접 열어 범위를 선택하고 단계의 **선택 범위로 위치 재연결**을 실행합니다.
+  확인 후 새 앵커만 연결합니다. **저장 당시 스니펫·당시 목표는 덮어쓰지 않습니다.**
+
+명령 팔레트에서 `분기 조사`로 명령을 찾을 수 있습니다. 단축키는 VS Code Keyboard Shortcuts에서 변경할 수 있습니다.
+키 바인딩은 확장 뷰/C·C++ 편집기에만 적용합니다. 선택 없음·지원하지 않는 URI에는 안내를 표시합니다.
+
+## 자동 저장·오류 복구
+
+기록은 현재 폴더의 **`.branch-investigation/workspace.json`**에 저장합니다. 기존 SQLite와 별개입니다.
+이 폴더에는 코드 스니펫이 포함되므로 프로젝트의 `.gitignore`에 `.branch-investigation/`를 추가하는 것을 권장합니다.
+확장은 임의로 사용자 `.gitignore`를 편집하지 않습니다. 이 개발 저장소에는 해당 제외 규칙을 추가했습니다.
+
+- 임시 파일 작성 → 파일 flush/fsync → 같은 폴더에서 원자 교체합니다. 이전 정상 문서는 `workspace.json.backup`에 보존합니다.
+- `writer.lock`으로 한 작성 창만 허용합니다. 다른 창은 조용히 덮어쓰지 않고 중단합니다. revision과 기존 파일 해시도 비교합니다.
+- **저장 중**과 **저장 실패·재시도**를 구분합니다. 실패한 변경은 현재 창에 dirty로 남고 **분기 조사: 저장 재시도**로 재시도합니다.
+  저장이 불가능한 상태에서 창을 강제 종료하면 아직 디스크에 쓰지 못한 변경은 복원할 수 없습니다.
+- 손상된 JSON을 만났다면 **분기 조사: 마지막 정상 백업 복구**를 명시적으로 선택합니다.
+  현재 원본은 `preserved-UUID.json`으로 보존한 뒤 검증한 백업을 복원합니다. 미래 schemaVersion은 덮어쓰지 않습니다.
+- 비정상 종료 뒤 잠금이 남으면 **분기 조사: 종료된 작성자의 잠금 복구**를 실행합니다.
+  같은 PC의 소유 PID가 종료됐다고 확인되는 경우만 복구하며 실행 중 프로세스를 종료하거나 잠금을 자동 삭제하지 않습니다.
+  PID가 재사용되었거나 권한 때문에 종료를 확인할 수 없으면 거부합니다. 관리자가 기록을 보존한 상태에서 소유자를 확인해야 합니다.
+  `recovery.lock`은 복구 동시 실행을 막습니다. 복구 도중 비정상 종료로 이 파일이 남은 경우도 임의 삭제하지 말고 소유 프로세스/보존 정책을 확인하세요.
+- JSON 16 MiB, 목표 1,000개, 단계 10,000개, 앵커/관계/근거 20,000개, 탐색 이력 2,000개, 트리 깊이 128을 상한으로 둡니다.
+  한 스니펫은 UTF-16 262,144자, 각 메모는 65,536자입니다. 한도 초과는 저장 전에 거부합니다.
+
+앵커는 0부터 시작하는 행·UTF-16 열, 끝 exclusive로 저장합니다. 화면 위치는 익숙한 1부터 시작하는 행·열로 표시합니다.
+미저장 편집이 있으면 디스크 대신 열린 문서 내용으로 지문을 확인합니다. 원본 C/H는 확장이 수정하지 않습니다.
+자동 이동은 범위 텍스트 일치 확인이며 실행·심볼 동일성의 증명은 아닙니다.
+
+## 개발·F5
+
+Node.js **22 이상**과 npm, VS Code가 필요합니다. Python 환경과 독립적입니다.
+Node/npm은 VS Code를 시작하는 환경의 PATH에 있어야 F5의 npm 빌드 작업을 실행할 수 있습니다.
+이번 개발 머신에서는 시스템 설정을 바꾸지 않고 저장소의 `build/tools/node-v22.23.4-win-x64`를 사용했습니다.
+이 경로를 현재 PowerShell의 PATH에 추가해 npm 명령을 실행하거나, 승인된 Node 설치를 사용하세요.
+
+```powershell
+cd extensions/branch-investigation
+npm ci
+npm run compile
+npm test
+```
+
+VS Code에서 **extensions/branch-investigation 폴더 자체**를 열고 F5 → **분기 조사 확장 실행**을 선택합니다.
+새 **Extension Development Host**에서 가상 샘플 폴더를 열고 위 확인 절차를 진행합니다.
+오프라인 확장 사용에는 npm/TypeScript 설치가 필요하지 않으며 개발 빌드에만 사용합니다.
+
+```powershell
+npm run test:host
+npm run package:vsix
+```
+
+Host 테스트는 설치된 VS Code 실행 파일을 사용하고 `build/branch-host-*`에 가상 작업 폴더와 독립 프로필을 만듭니다.
+다른 설치 위치/OS에서는 `VSCODE_EXECUTABLE_PATH` 환경 변수에 실행 파일 경로를 지정하세요.
+신뢰 상태에서는 test-electron을 사용하고, 미신뢰 검증은 라이브러리의 자동 `--disable-workspace-trust`를 피하도록
+VS Code CLI를 별도로 실행합니다. 테스트 프로필만 사용하며 사용자의 기존 신뢰 설정을 바꾸지 않습니다.
+수동 UI 검증용 가상 폴더는 `node test/launchManual.cjs`로 열 수 있습니다.
+패키지의 별도 설치 확인은 `node test/installPackage.cjs`입니다. 사용자 확장 폴더와 분리된 build 하위 경로를 사용합니다.
+
+패키지는 저장소 루트의 **build/branch-investigation-0.1.0.vsix**에 생성됩니다.
+배포물에는 컴파일한 JS·아이콘·manifest·README가 들어가며 test·node_modules·소스맵은 제외합니다.
+
+## 기존 엔진과의 경계
+
+P0는 기존 Python 엔진·SQLite·Tkinter를 변경하지 않습니다. 조사 기록을 가짜 FunctionDefinition으로 만들지 않습니다.
+`src/adapters/traceAnalysisPort.ts`만 향후 연결 계약을 정의하고 기본 구현은 비활성입니다.
+P1에서 승인된 Python 인터프리터의 stdin/stdout JSON adapter로 기존 `analyze_project`,
+`ProjectSnapshot.search_functions`, `Workbench.candidates/value_candidates/execution_candidates`를 재사용합니다.
+바이트/인코딩 → UTF-16 변환도 그 경계에서 검증해야 하며 P0 구현/검증에 포함하지 않습니다.
+
+P1 후속은 분석 후보 연결, 일괄 붙여넣기 분류, 검색/필터, 앵커 후보 복구, 기존 SQLite 읽기 전용 import입니다.
+P2 그래프·성능 개선과 CT 자동 조작은 이번 범위에 포함하지 않습니다.
+
+## 현장 배포 전 확인
+
+승인 PC에서 VS Code와 오프라인 VSIX 설치가 허용되는지, 기록 저장/보존·백업 정책이 맞는지 확인합니다.
+Python 실행 승인은 P1 연동 때 확인합니다. 확장은 네트워크·AI·텔레메트리·자동 내보내기를 제공하지 않습니다.
+VS Code 자체와 다른 확장의 보안/네트워크 정책은 별도 관리 대상입니다.
+고객 소스·CT 자료를 다른 PC나 Codex로 제공하라고 안내하지 않습니다. 개발·검증에는 가상 코드만 사용했습니다.
+
+API 참고: [Tree View](https://code.visualstudio.com/api/extension-guides/tree-view),
+[Webview](https://code.visualstudio.com/api/extension-guides/webview),
+[Extension 테스트](https://code.visualstudio.com/api/working-with-extensions/testing-extension).

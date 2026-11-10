@@ -5,6 +5,7 @@ const { spawn } = require('node:child_process');
 const { Writable } = require('node:stream');
 (async () => {
   const extension = path.resolve(__dirname, '..'), repo = path.resolve(extension, '../..');
+  const developmentPath=process.env.BRANCH_EXTENSION_PATH||extension;
   const base = await fs.mkdtemp(path.join(repo, 'build', 'branch-host-'));
   const workspace = path.join(base, 'workspace'); await fs.mkdir(workspace);
   for (const name of ['consumer.c', 'producer.c', 'struct_paths.h', 'Rte_StructPaths.h']) {
@@ -26,9 +27,9 @@ const { Writable } = require('node:stream');
       // test-electron 3.x always appends --disable-workspace-trust; use the real CLI without that flag.
       await fs.mkdir(path.join(userData,'User'),{recursive:true});
       await fs.writeFile(path.join(userData,'User/settings.json'),JSON.stringify({'security.workspace.trust.enabled':true,'security.workspace.trust.startupPrompt':'never','telemetry.telemetryLevel':'off','update.mode':'none'}));
-      await new Promise((resolve,reject)=>{const child=spawn(executable,[...args,'--extensionDevelopmentPath='+extension,'--extensionTestsPath='+testsPath],{env:testEnv});child.stdout.on('data',b=>log.write(b));child.stderr.on('data',b=>log.write(b));child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Untrusted Host exit '+code)));});
+      await new Promise((resolve,reject)=>{const child=spawn(executable,[...args,'--extensionDevelopmentPath='+developmentPath,'--extensionTestsPath='+testsPath],{env:testEnv});child.stdout.on('data',b=>log.write(b));child.stderr.on('data',b=>log.write(b));child.on('error',reject);child.on('exit',code=>code===0?resolve():reject(Error('Untrusted Host exit '+code)));});
     } else {
-      await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:extension,extensionTestsPath:testsPath,launchArgs:args,extensionTestsEnv:testEnv,stdout:log,stderr:log});
+      await runTests({vscodeExecutablePath:executable,extensionDevelopmentPath:developmentPath,extensionTestsPath:testsPath,launchArgs:args,extensionTestsEnv:testEnv,stdout:log,stderr:log});
     }
   }
   await new Promise(resolve=>log.end(resolve));await logHandle.close();

@@ -1,5 +1,13 @@
 # 아키텍처
 
+## VS Code 조사 기록 P0
+
+`extensions/branch-investigation`은 TypeScript 확장이다. TreeView/Webview/명령 → InvestigationService →
+JSON 저장소와 AnchorResolver/NavigationHistory를 사용한다. 기록은 `.branch-investigation/workspace.json`에 저장하며
+기존 Trace 모델·SQLite와 분리한다. P0는 Python 프로세스를 실행하지 않는다.
+P1용 TraceAnalysisPort는 기존 Workbench/ProjectSnapshot의 호출·RTE·값·조건 API 재사용 경계이며 기본 비활성이다.
+자세한 [설치·설계·검증 안내](../extensions/branch-investigation/README.md)를 참고한다.
+
 ## 예정된 데이터 흐름
 
 읽기 전용 C 소스 → scanner → parser → 분석 모델 → storage(SQLite)

@@ -8,6 +8,7 @@ import { decodeDetailMessage } from '../../src/ui/detailsPanel';
 export async function run():Promise<void>{
   const phase=process.env.BRANCH_HOST_PHASE!,base=process.env.BRANCH_HOST_BASE!,root=vscode.workspace.workspaceFolders![0].uri.fsPath;
   const ext=vscode.extensions.getExtension<InvestigationController>('huelune.branch-investigation')!;assert.ok(ext);
+  if(process.env.BRANCH_EXTENSION_PATH){assert.equal(ext.extensionPath.toLowerCase(),process.env.BRANCH_EXTENSION_PATH.toLowerCase());}
   if(phase==='untrusted'){
     assert.equal(vscode.workspace.isTrusted,false);let rejected=false;try{await ext.activate();}catch{rejected=true;}assert.ok(rejected||!ext.exports?.service);console.log('PASS Host: Restricted Mode refuses active recording');return;
   }

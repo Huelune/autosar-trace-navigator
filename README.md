@@ -1,6 +1,10 @@
 # autosar-trace-navigator
 
 AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보존하는 로컬 도구.
+
+**VS Code 조사 확장 P0**는 [extensions/branch-investigation](extensions/branch-investigation/README.md)에 있습니다.
+코드 선택·이유 저장 → 조사 트리 → 상세·정확한 소스 재방문을 VS Code 안에서 제공하며 P0는 Python 없이 동작합니다.
+아래 Python/Tkinter 도구와 저장소는 그대로 유지합니다.
 현재 **STEP 1: 프로젝트 구조 및 Python 환경**과 사용자 요청에 따른
 [6단계 추적용 가상 AUTOSAR 샘플](test/README.md)을 구현했습니다.
 읽기 전용 C/H 파일 스캐너와 함수 정의·호출·분기 구문 파서를 구현했습니다.
