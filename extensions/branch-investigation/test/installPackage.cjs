@@ -1,3 +1,4 @@
+require('./prepare.cjs');
 const fs=require('node:fs/promises'),path=require('node:path'),{spawnSync}=require('node:child_process');
 (async()=>{const repo=path.resolve(__dirname,'../../..'),base=await fs.mkdtemp(path.join(repo,'build','branch-package-')),extensions=path.join(base,'extensions'),profile=path.join(base,'profile');
 const executable=process.env.VSCODE_EXECUTABLE_PATH||path.join(process.env.LOCALAPPDATA,'Programs/Microsoft VS Code/Code.exe');const folder=path.dirname(executable);

@@ -1,3 +1,4 @@
+require('./prepare.cjs');
 const fs = require('node:fs/promises');
 const path = require('node:path');
 const { runTests } = require('@vscode/test-electron');

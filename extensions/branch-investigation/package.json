@@ -33,8 +33,11 @@
   "scripts": {
     "compile": "tsc -p .",
     "watch": "tsc -watch -p .",
+    "pretest": "node test/prepare.cjs",
     "test": "npm run compile && node --test dist/test/unit/*.test.js",
+    "pretest:host": "node test/prepare.cjs",
     "test:host": "npm run compile && node test/runHost.cjs",
+    "prepackage:vsix": "node test/prepare.cjs",
     "package:vsix": "npm run compile && vsce package --no-dependencies --out ../../build/branch-investigation-0.1.0.vsix"
   },
   "contributes": {
