@@ -6,6 +6,10 @@ build/
 dist/
 wheelhouse/
 .coverage
+.branch-investigation/
+extensions/branch-investigation/node_modules/
+extensions/branch-investigation/dist/
+extensions/branch-investigation/.vscode-test/
 *.sqlite3
 !examples/tutorial.sqlite3
 !examples/struct_tutorial.sqlite3

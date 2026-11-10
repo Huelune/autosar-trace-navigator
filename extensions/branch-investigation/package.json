@@ -1,0 +1,210 @@
+{
+  "name": "branch-investigation",
+  "displayName": "Branch Investigation — 로컬 분기 조사",
+  "description": "선택한 코드와 조사 이유, 목표와 대체 경로를 로컬에 보존합니다.",
+  "version": "0.1.0",
+  "publisher": "huelune",
+  "license": "UNLICENSED",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Huelune/autosar-trace-navigator.git",
+    "directory": "extensions/branch-investigation"
+  },
+  "engines": {
+    "vscode": "^1.95.0"
+  },
+  "categories": [
+    "Other"
+  ],
+  "main": "./dist/src/extension.js",
+  "activationEvents": [
+    "onView:branchInvestigation.tree"
+  ],
+  "extensionKind": [
+    "workspace"
+  ],
+  "capabilities": {
+    "untrustedWorkspaces": {
+      "supported": false,
+      "description": "로컬 조사 파일을 기록하려면 신뢰한 작업 공간이 필요합니다."
+    },
+    "virtualWorkspaces": false
+  },
+  "scripts": {
+    "compile": "tsc -p .",
+    "watch": "tsc -watch -p .",
+    "test": "npm run compile && node --test dist/test/unit/*.test.js",
+    "test:host": "npm run compile && node test/runHost.cjs",
+    "package:vsix": "npm run compile && vsce package --no-dependencies --out ../../build/branch-investigation-0.1.0.vsix"
+  },
+  "contributes": {
+    "commands": [
+      {
+        "command": "branchInvestigation.createGoal",
+        "title": "새 조사 목표 만들기",
+        "category": "분기 조사",
+        "icon": "$(add)"
+      },
+      {
+        "command": "branchInvestigation.switchGoal",
+        "title": "조사 목표 전환",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.addSelection",
+        "title": "현재 조사에 추가",
+        "category": "분기 조사",
+        "icon": "$(add)"
+      },
+      {
+        "command": "branchInvestigation.addSnippet",
+        "title": "수동 스니펫 붙여넣기",
+        "category": "분기 조사",
+        "icon": "$(note)"
+      },
+      {
+        "command": "branchInvestigation.openStep",
+        "title": "조사단계 열기",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.editStep",
+        "title": "조사 정보 수정",
+        "category": "분기 조사",
+        "icon": "$(edit)"
+      },
+      {
+        "command": "branchInvestigation.setStatus",
+        "title": "조사 상태 변경",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.goParent",
+        "title": "상위 조사로 이동",
+        "category": "분기 조사",
+        "icon": "$(arrow-up)"
+      },
+      {
+        "command": "branchInvestigation.navigateBack",
+        "title": "이전 방문 위치",
+        "category": "분기 조사",
+        "icon": "$(arrow-left)"
+      },
+      {
+        "command": "branchInvestigation.navigateForward",
+        "title": "다음 방문 위치",
+        "category": "분기 조사",
+        "icon": "$(arrow-right)"
+      },
+      {
+        "command": "branchInvestigation.repairAnchor",
+        "title": "선택 범위로 위치 재연결",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.retrySave",
+        "title": "저장 재시도",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.recoverBackup",
+        "title": "마지막 정상 백업 복구",
+        "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.recoverLock",
+        "title": "종료된 작성자의 잠금 복구",
+        "category": "분기 조사"
+      }
+    ],
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "branchInvestigation",
+          "title": "Branch Investigation",
+          "icon": "media/branch.svg"
+        }
+      ]
+    },
+    "views": {
+      "branchInvestigation": [
+        {
+          "id": "branchInvestigation.tree",
+          "name": "조사 목표와 단계"
+        }
+      ]
+    },
+    "viewsWelcome": [
+      {
+        "view": "branchInvestigation.tree",
+        "contents": "코드 범위를 선택해 이유와 함께 저장하세요.\n[새 목표](command:branchInvestigation.createGoal)\n[선택 코드 추가](command:branchInvestigation.addSelection)\n[스니펫 붙여넣기](command:branchInvestigation.addSnippet)\n조사 트리는 실행 순서가 아닙니다."
+      }
+    ],
+    "keybindings": [
+      {
+        "command": "branchInvestigation.addSelection",
+        "key": "ctrl+alt+i",
+        "mac": "cmd+alt+i",
+        "when": "isWorkspaceTrusted && ((editorTextFocus && editorHasSelection && (editorLangId == c || editorLangId == cpp)) || focusedView == branchInvestigation.tree)"
+      }
+    ],
+    "menus": {
+      "editor/context": [
+        {
+          "command": "branchInvestigation.addSelection",
+          "when": "isWorkspaceTrusted && editorHasSelection && (editorLangId == c || editorLangId == cpp)",
+          "group": "navigation@90"
+        }
+      ],
+      "view/title": [
+        {
+          "command": "branchInvestigation.createGoal",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@1"
+        },
+        {
+          "command": "branchInvestigation.addSnippet",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@2"
+        },
+        {
+          "command": "branchInvestigation.goParent",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@3"
+        },
+        {
+          "command": "branchInvestigation.navigateBack",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@4"
+        },
+        {
+          "command": "branchInvestigation.navigateForward",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@5"
+        }
+      ],
+      "view/item/context": [
+        {
+          "command": "branchInvestigation.editStep",
+          "when": "view == branchInvestigation.tree && viewItem == step",
+          "group": "inline@1"
+        },
+        {
+          "command": "branchInvestigation.setStatus",
+          "when": "view == branchInvestigation.tree && viewItem == step"
+        },
+        {
+          "command": "branchInvestigation.repairAnchor",
+          "when": "view == branchInvestigation.tree && viewItem == step"
+        }
+      ]
+    }
+  },
+  "devDependencies": {
+    "@types/node": "22.20.5",
+    "@types/vscode": "1.95.0",
+    "@vscode/test-electron": "3.1.0",
+    "@vscode/vsce": "4.1.0",
+    "typescript": "5.9.3"
+  }
+}

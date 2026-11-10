@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### VS Code P0 조사 기록 기반
+- 기존 Python/SQLite와 독립적인 조사 목표·단계·코드 앵커·근거·방문 모델과 runtime 검증 추가.
+- UTF-16/CRLF 위치·지문 검증, 명시적 위치 재연결 시 당시 목표·스니펫 보존.
+- 직렬 변경 큐·dirty 재시도, 배타 writer·revision 충돌, fsync와 원자 교체·정상 백업·손상 원본 보존 구현.
+- 확장 TypeScript 빌드/개발 Host 구성과 P1 엔진 연동 포트 경계 추가. P0는 Python 프로세스를 실행하지 않음.
+- Windows에서 도메인·실제 파일 저장·앵커·CSP 기반 테스트 18개 통과. 화면 연결과 Host E2E는 다음 단계.
+
 ### uv 환경과 패키지 설치
 - uv.lock으로 실행 패키지와 선택형 test 그룹의 Zig 0.15.2 버전·배포 파일 해시 관리.
 - uv sync로 환경 구성·의존성 설치, uv run으로 실행할 GUI 명령 추가.
