@@ -67,7 +67,7 @@
       },
       {
         "command": "branchInvestigation.traceRelated",
-        "title": "관련 후보 조회 (호출·RTE)",
+        "title": "관련 후보 조회 (값·조건·호출·RTE)",
         "category": "분기 조사",
         "icon": "$(references)"
       },

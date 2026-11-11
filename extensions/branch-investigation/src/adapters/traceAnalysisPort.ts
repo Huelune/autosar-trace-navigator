@@ -2,9 +2,13 @@ import { spawn } from 'node:child_process';
 
 /** Engine facts and investigation records stay distinct: a candidate is never a Step until the user picks it. */
 export interface EngineLocation { path: string; startLine: number; endLine: number; startCharacter: number | null; endCharacter: number | null; text: string | null }
-export interface AnalysisCandidate { relation: 'call' | 'rte_data'; label: string; functionName: string | null; uncertainty: string[]; evidence: EngineLocation; target: EngineLocation | null }
-export interface RelatedRequest { root: string; file: string; line: number; includePaths: string[] }
-export interface RelatedResult { functionName: string | null; candidates: AnalysisCandidate[]; truncated: boolean }
+const relations = ['value', 'execution_condition', 'call', 'rte_data'] as const;
+/** requiredTruth is set only for an execution condition: the truth value needed to reach the cursor, not a proof that it can hold. */
+export interface AnalysisCandidate { relation: typeof relations[number]; label: string; functionName: string | null; uncertainty: string[]; requiredTruth: boolean | null; evidence: EngineLocation; target: EngineLocation | null }
+/** line and character are the editor's zero-based line and UTF-16 column of the cursor. */
+export interface RelatedRequest { root: string; file: string; line: number; character: number; includePaths: string[] }
+/** variable is the access path under the cursor when the engine can trace it; notes are reason codes for what it could not do. */
+export interface RelatedResult { functionName: string | null; variable: string | null; notes: string[]; candidates: AnalysisCandidate[]; truncated: boolean }
 export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> }
 
 /** Kind and next action only. Engine or OS error text may contain paths and is never shown. */
@@ -38,18 +42,21 @@ function location(v: unknown): EngineLocation {
 }
 /** Accept only the documented shape; anything else is one error, never a partial result. */
 export function parseRelated(raw: string): RelatedResult {
-  let r: { ok?: unknown; error?: unknown; function?: { name?: unknown } | null; candidates?: unknown; truncated?: unknown };
+  let r: { ok?: unknown; error?: unknown; function?: { name?: unknown } | null; variable?: unknown; notes?: unknown; candidates?: unknown; truncated?: unknown };
   try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
   if (r?.ok === false) { throw new AnalysisError(typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal'); }
   const name = r?.function === null ? null : r?.function?.name;
-  if (r?.ok !== true || !(name === null || text(name, 1000)) || !Array.isArray(r.candidates) || r.candidates.length > 200 || typeof r.truncated !== 'boolean') { throw new AnalysisError('invalid_response'); }
+  const notes = r?.notes, variable = r?.variable;
+  if (r?.ok !== true || !(name === null || text(name, 1000)) || !(variable === null || text(variable, 1000)) || !Array.isArray(notes) || notes.length > 20 || !notes.every(n => text(n, 200))
+    || !Array.isArray(r.candidates) || r.candidates.length > 200 || typeof r.truncated !== 'boolean') { throw new AnalysisError('invalid_response'); }
   const candidates = r.candidates.map((c: AnalysisCandidate) => {
-    const valid = (c?.relation === 'call' || c?.relation === 'rte_data') && text(c.label, 1000) && (c.functionName === null || text(c.functionName, 1000))
+    const valid = relations.includes(c?.relation) && text(c.label, 1000) && (c.functionName === null || text(c.functionName, 1000))
+      && (c.relation === 'execution_condition' ? typeof c.requiredTruth === 'boolean' : c.requiredTruth === null)
       && Array.isArray(c.uncertainty) && c.uncertainty.length <= 50 && c.uncertainty.every(u => text(u, 200));
     if (!valid) { throw new AnalysisError('invalid_response'); }
-    return { relation: c.relation, label: c.label, functionName: c.functionName, uncertainty: [...c.uncertainty], evidence: location(c.evidence), target: c.target === null ? null : location(c.target) };
+    return { relation: c.relation, label: c.label, functionName: c.functionName, uncertainty: [...c.uncertainty], requiredTruth: c.requiredTruth, evidence: location(c.evidence), target: c.target === null ? null : location(c.target) };
   });
-  return { functionName: name, candidates, truncated: r.truncated };
+  return { functionName: name, variable, notes: [...notes], candidates, truncated: r.truncated };
 }
 
 /** One short-lived local process per request: no shell, no network, stderr discarded. */

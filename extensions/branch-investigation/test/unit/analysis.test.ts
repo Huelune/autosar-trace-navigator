@@ -6,19 +6,21 @@ import { CapturedCode, clone, emptyDocument } from '../../src/domain/model';
 
 // Node stands in for the Python process: the port only cares about stdin, stdout and exit.
 const fake = (script: string, timeoutMs = 20000, maxOutputBytes = 1024 * 1024) => new PythonTraceAnalysisPort(process.execPath, ['-e', script], timeoutMs, maxOutputBytes);
-const request = { root: 'C:/fictional', file: 'a.c', line: 3, includePaths: ['.'] };
+const request = { root: 'C:/fictional', file: 'a.c', line: 3, character: 7, includePaths: ['.'] };
 const place = { path: 'src/b.c', startLine: 4, endLine: 4, startCharacter: 2, endCharacter: 9, text: 'Writer()' };
-const candidate = { relation: 'rte_data', label: 'Speed', functionName: 'Producer', uncertainty: ['name_only_connection'], evidence: place, target: place };
+const candidate = { relation: 'rte_data', label: 'Speed', functionName: 'Producer', uncertainty: ['name_only_connection'], requiredTruth: null, evidence: place, target: place };
+const condition = { ...candidate, relation: 'execution_condition', label: '(mode == 1)', requiredTruth: false };
+const empty = { ok: true, function: null, variable: null, notes: [], candidates: [], truncated: false };
 const reply = (value: unknown) => `process.stdout.write(${JSON.stringify(JSON.stringify(value))})`;
 const code = async (run: Promise<unknown>): Promise<string> => { try { await run; } catch (e) { assert.ok(e instanceof AnalysisError); return e.code; } throw new Error('expected a failure'); };
 const idle = new AbortController().signal;
 
 test('request is sent as one JSON document and a valid reply is returned as candidates', async () => {
-  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:r.file+':'+r.line+':'+r.includePaths[0]},candidates:[${JSON.stringify(candidate)}],truncated:false}))})`;
+  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:[r.file,r.line,r.character,r.includePaths[0]].join(':')},variable:'pedal',notes:['access_path_not_supported'],candidates:${JSON.stringify([condition, candidate])},truncated:false}))})`;
   const result = await fake(echo).related(request, idle);
-  assert.equal(result.functionName, 'a.c:3:.');
-  assert.deepEqual(result.candidates, [candidate]);
-  assert.deepEqual(await fake(reply({ ok: true, function: null, candidates: [], truncated: false })).related(request, idle), { functionName: null, candidates: [], truncated: false });
+  assert.deepEqual([result.functionName, result.variable, result.notes], ['a.c:3:7:.', 'pedal', ['access_path_not_supported']]);
+  assert.deepEqual(result.candidates, [condition, candidate]);
+  assert.deepEqual(await fake(reply(empty)).related(request, idle), { functionName: null, variable: null, notes: [], candidates: [], truncated: false });
 });
 
 test('process failures become a kind without the executable path or engine text', async () => {
@@ -40,18 +42,21 @@ test('cancel stops the process and reports cancelled, before or during the run',
 });
 
 test('a reply that could move the editor outside the workspace or to a guessed column is refused whole', () => {
-  const ok = { ok: true, function: { name: 'F' }, candidates: [candidate], truncated: false };
+  const ok = { ...empty, function: { name: 'F' }, candidates: [candidate] };
   assert.equal(parseRelated(JSON.stringify(ok)).candidates.length, 1);
   const unlocated = { ...place, startCharacter: null, endCharacter: null, text: null };
   assert.equal(parseRelated(JSON.stringify({ ...ok, candidates: [{ ...candidate, target: unlocated }] })).candidates[0].target!.text, null);
   assert.equal(parseRelated(JSON.stringify({ ...ok, candidates: [{ ...candidate, target: null }] })).candidates[0].target, null);
+  assert.equal(parseRelated(JSON.stringify({ ...ok, candidates: [{ ...candidate, relation: 'value' }, condition] })).candidates[1].requiredTruth, false);
   for (const bad of [
     { ...candidate, target: { ...place, path: '../outside.c' } }, { ...candidate, target: { ...place, path: 'C:/outside.c' } },
     { ...candidate, target: { ...place, path: '/outside.c' } }, { ...candidate, target: { ...place, path: 'src\\..\\..\\outside.c' } },
     { ...candidate, target: { ...place, startCharacter: null } }, { ...candidate, target: { ...place, endLine: 3 } },
     { ...candidate, target: { ...place, startLine: -1 } }, { ...candidate, relation: 'read' }, { ...candidate, uncertainty: [1] }, { ...candidate, evidence: null },
+    // The needed truth value belongs to execution conditions only, and they must carry one.
+    { ...candidate, requiredTruth: true }, { ...condition, requiredTruth: null }, { ...condition, requiredTruth: 'false' },
   ]) { assert.throws(() => parseRelated(JSON.stringify({ ...ok, candidates: [bad] })), (e: AnalysisError) => e.code === 'invalid_response'); }
-  for (const bad of [{ ...ok, truncated: 'no' }, { ...ok, candidates: {} }, { ...ok, function: { name: 5 } }, { ok: 'true' }, null, []]) {
+  for (const bad of [{ ...ok, truncated: 'no' }, { ...ok, candidates: {} }, { ...ok, function: { name: 5 } }, { ...ok, variable: 3 }, { ...ok, notes: 'none' }, { ...ok, notes: [1] }, { ok: 'true' }, null, []]) {
     assert.throws(() => parseRelated(JSON.stringify(bad)), (e: AnalysisError) => e.code === 'invalid_response');
   }
 });
@@ -62,7 +67,9 @@ test('a picked candidate records its relation type and engine uncertainty; manua
   await s.add(capture, '읽는 쪽', { title: '목표', description: '' });
   await s.add(capture, 'Writer 후보 조사', undefined, { type: 'data_dependency', uncertainty: ['name_only_connection'] });
   await s.add(capture, '직접 고른 코드');
-  const [linked, manual] = s.document.relations;
+  await s.add(capture, '앞선 조건이 거짓이어야 함', undefined, { type: 'manual', uncertainty: ['condition_satisfiability_not_proven', 'execution_requirement_false'] });
+  const [linked, manual, required] = s.document.relations;
   assert.deepEqual([linked.type, linked.uncertainty], ['data_dependency', ['name_only_connection', 'investigation_order_is_not_execution_order']]);
   assert.deepEqual([manual.type, manual.uncertainty], ['manual', ['investigation_order_is_not_execution_order']]);
+  assert.deepEqual([required.type, required.uncertainty], ['manual', ['condition_satisfiability_not_proven', 'execution_requirement_false', 'investigation_order_is_not_execution_order']]);
 });

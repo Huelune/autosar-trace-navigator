@@ -48,6 +48,19 @@ export async function run():Promise<void>{
       assert.equal(linked.parentStepId,writer);assert.equal(edge.type,'data_dependency');assert.ok(edge.uncertainty.includes('name_only_connection'));assert.match(linked.snippet,/^Rte_Write_Struct_State\(/);
       assert.equal(vscode.window.activeTextEditor!.document.uri.fsPath.toLowerCase(),path.join(root,'producer.c').toLowerCase());assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),linked.snippet);
       console.log('PASS Host: engine candidates offered / cancel records nothing / picked RTE writer becomes a linked step');
+      // Cursor on a traced member: value sources come first; a picked one becomes a data_dependency step under the current step.
+      const member=await select('consumer.c','b.a');member.editor.selection=new vscode.Selection(member.range.start,member.range.start);const parent=service.document.currentStepId!;
+      let labels:string[]=[],title='';app.setPromptsForTests({input:async()=>'b.a 값의 출처 조사',snippet:async()=>undefined,pick:async(items,options)=>{labels=items.map(i=>i.label);title=options.title??'';return items.find(i=>i.label.startsWith('값 출처'));}});
+      await command('traceRelated');assert.ok(title.includes('b.a'),'variable shown in title');assert.ok(labels[0].startsWith('값 출처'),'value sources listed first');assert.ok(labels.some(l=>l.startsWith('호출')));
+      const valueStep=service.document.steps.find(s=>s.id===service.document.currentStepId)!,valueEdge=service.document.relations.find(r=>r.toStepId===valueStep.id)!;
+      assert.equal(valueStep.parentStepId,parent);assert.equal(valueEdge.type,'data_dependency');assert.ok(valueEdge.uncertainty.includes('value_source_candidate'));
+      // Cursor inside a branch body: the condition to reach it is offered with the needed truth value and recorded as a prerequisite, not a data relation.
+      const body=await select('unicode.c','return 0;');body.editor.selection=new vscode.Selection(body.range.start,body.range.start);
+      app.setPromptsForTests({input:async()=>'이 줄에 도달하려면 조건이 참이어야 함',snippet:async()=>undefined,pick:async items=>{labels=items.map(i=>i.label);return items.find(i=>i.label.startsWith('실행 조건'));}});
+      await command('traceRelated');assert.ok(labels.some(l=>l==='실행 조건: 참 필요 · (a < 60)'),labels.join(' | '));
+      const conditionStep=service.document.steps.find(s=>s.id===service.document.currentStepId)!,conditionEdge=service.document.relations.find(r=>r.toStepId===conditionStep.id)!;
+      assert.equal(conditionStep.snippet,'(a < 60)');assert.equal(conditionEdge.type,'manual');assert.ok(conditionEdge.uncertainty.includes('execution_requirement_true'));assert.ok(conditionEdge.uncertainty.includes('condition_satisfiability_not_proven'));
+      console.log('PASS Host: cursor variable value sources first / execution condition with needed truth recorded as prerequisite');
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     const edited=await select('unicode.c','else return 1;');await edited.editor.edit(b=>b.insert(new vscode.Position(0,0),'// unsaved\r\n'));assert.equal(edited.doc.isDirty,true);await command('openStep',first.id);assert.equal(resolutionState(),'needs_review');assert.equal(service.document.steps[0].snippet,original.snippet);
     await fs.unlink(path.join(root,'producer.c'));await command('openStep',writer);assert.equal(resolutionState(),'missing');

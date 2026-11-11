@@ -79,13 +79,16 @@ export class InvestigationController {
     const root=await fs.realpath(this.root!),file=path.relative(root,await sourcePath(this.root!,editor.document.uri.toString())).replaceAll('\\','/');
     const result=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'분기 조사: 관련 후보 조회 중',cancellable:true},(_progress,token)=>{
       const abort=new AbortController();token.onCancellationRequested(()=>abort.abort());
-      return new PythonTraceAnalysisPort(python).related({root,file,line:editor.selection.active.line,includePaths:paths},abort.signal);
+      return new PythonTraceAnalysisPort(python).related({root,file,line:editor.selection.start.line,character:editor.selection.start.character,includePaths:paths},abort.signal);
     });
     if(!result.functionName){void vscode.window.showInformationMessage('커서가 분석된 함수 안에 있지 않습니다.');return;}
-    if(!result.candidates.length){void vscode.window.showInformationMessage('이 함수에서 분석 범위 안의 호출·RTE 후보를 찾지 못했습니다. 범위 밖에 없다는 뜻은 아닙니다.');return;}
-    const kinds={call:'호출',rte_data:'RTE 데이터'};
-    const items=result.candidates.map(c=>({label:`${kinds[c.relation]}: ${c.label}`,description:c.target?`${c.functionName??''} · ${c.target.path}:${c.target.startLine+1}`:'분석 범위 안에서 정의를 찾지 못함',detail:c.uncertainty.join(', '),candidate:c}));
-    const options={title:`${result.functionName}의 관련 후보${result.truncated?' (일부만 표시)':''} — 이름 기반 후보이며 실제 연결·실행 순서가 아닙니다.`,matchOnDescription:true,matchOnDetail:true};
+    // Reason codes for what the engine could not do at the cursor. Unknown codes are not shown as text.
+    const reasons:Record<string,string>={cursor_position_not_resolved:'커서 위치를 확정할 수 없어 값·조건 후보는 조회하지 못했습니다(파일 인코딩 확인).',access_path_not_supported:'커서의 배열·복합 경로는 값 추적을 지원하지 않습니다.',value_sources_not_available:'커서의 식은 값 출처를 조회할 수 없습니다.'};
+    const limits=result.notes.map(n=>reasons[n]).filter(Boolean).join(' ');
+    if(!result.candidates.length){void vscode.window.showInformationMessage(`분석 범위 안에서 후보를 찾지 못했습니다. 범위 밖에 없다는 뜻은 아닙니다. ${limits}`.trim());return;}
+    const kinds={value:'값 출처',execution_condition:'실행 조건',call:'호출',rte_data:'RTE 데이터'};
+    const items=result.candidates.map(c=>({label:`${kinds[c.relation]}: ${c.requiredTruth===null?'':c.requiredTruth?'참 필요 · ':'거짓 필요 · '}${c.label}`,description:c.target?`${c.functionName??''} · ${c.target.path}:${c.target.startLine+1}`:'분석 범위 안에서 정의를 찾지 못함',detail:c.uncertainty.join(', '),candidate:c}));
+    const options={title:`${result.functionName}${result.variable?` · ${result.variable}`:''}의 관련 후보${result.truncated?' (일부만 표시)':''} — 구문·이름 기반 후보이며 실제 연결·실행 순서·조건 충족의 증명이 아닙니다.`,placeHolder:limits||(result.variable?undefined:'변수 위에 커서를 두면 그 값의 출처 후보도 조회합니다.'),matchOnDescription:true,matchOnDetail:true};
     const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
     if(!picked){return;}
     const target=picked.candidate.target;
@@ -97,7 +100,9 @@ export class InvestigationController {
     const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real)),range=new vscode.Range(target.startLine,startCharacter,target.endLine,endCharacter),same=(s:string)=>s.replaceAll('\r\n','\n');
     requireValue(doc.validateRange(range).isEqual(range)&&same(doc.getText(range))===same(text),'위치 확인 필요: 편집기 내용이 분석한 내용과 다릅니다. 파일을 저장하거나 인코딩을 확인한 뒤 다시 조회하세요.');
     const shown=await vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:range});shown.setDecorations(this.decoration,[range]);
-    await this.add(await this.capture(this.snapshotOf(doc,range)),{type:picked.candidate.relation==='call'?'call':'data_dependency',uncertainty:picked.candidate.uncertainty});
+    // A condition is a prerequisite, not a call or data relation: keep it 'manual' and record the needed truth value with the engine's reasons.
+    const {relation,requiredTruth,uncertainty}=picked.candidate;
+    await this.add(await this.capture(this.snapshotOf(doc,range)),relation==='execution_condition'?{type:'manual',uncertainty:[...uncertainty,`execution_requirement_${requiredTruth}`]}:{type:relation==='call'?'call':'data_dependency',uncertainty});
   }
   private stepId(arg:unknown):string{const candidate=typeof arg==='string'?arg:arg&&typeof arg==='object'?(arg as {id?:unknown}).id:undefined;const value=candidate??this.ready().document.currentStepId;requireValue(validId(value),'조사단계를 선택하세요.');return value;}
   register():void{

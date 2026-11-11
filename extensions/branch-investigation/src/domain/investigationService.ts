@@ -4,7 +4,7 @@ import { visit } from '../navigation/history';
 export interface InvestigationRepository { save(d: WorkspaceDocument, expected: number): Promise<WorkspaceDocument> }
 export interface GoalInput { title: string; description: string }
 /** How an analysis candidate, picked by the user, relates the new step to its parent. Still a candidate, not a proven link. */
-export interface StepLink { type: Exclude<RelationEdge['type'], 'manual'>; uncertainty: readonly string[] }
+export interface StepLink { type: RelationEdge['type']; uncertainty: readonly string[] }
 export type StepEdit = Pick<InvestigationStep, 'reason'|'hypothesis'|'observation'|'requiredConditions'|'derivedConditions'|'result'|'nextAction'|'status'>;
 /** Pure investigation domain, independent of VS Code and the Python parser. */
 export class InvestigationService {
