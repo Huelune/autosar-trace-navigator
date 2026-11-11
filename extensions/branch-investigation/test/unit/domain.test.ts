@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CapturedCode, clone, emptyDocument, id, WorkspaceDocument } from '../../src/domain/model';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { validate } from '../../src/domain/validation';
+import { forks, shownChildren, shownParent, startsBranch } from '../../src/ui/treeLayout';
 const capture=(file='file:///C:/fictional/a.c'):CapturedCode=>({snippet:'if (pedal >= 60u)',fileUri:file,relativePath:'a.c',range:{start:{line:2,character:0},end:{line:2,character:18}},contextBefore:'',contextAfter:''});
 const setup=()=>new InvestigationService(emptyDocument(),{async save(d){const n=clone(d);n.revision++;return n;}});
 async function initial(){const s=setup();const root=await s.add(capture(),'목표 입력 확인',{title:'정상 경로',description:'수동 분기 앵커'});return {s,root};}
@@ -28,4 +29,21 @@ test('deleting a goal removes its steps only and leaves no goal current',async()
   assert.equal(await s.removeGoal(doomed),1);const d=s.document;validate(d);
   assert.deepEqual(d.goals.map(g=>g.id),[kept]);assert.equal(d.steps.length,2);assert.equal(d.steps[0].id,root);assert.equal(d.currentGoalId,undefined);assert.equal(d.currentStepId,undefined);
   assert.ok(!d.anchors.some(a=>a.fileUri?.endsWith('d.c')));assert.ok(d.navigationEvents.every(e=>e.goalId===kept));await assert.rejects(s.removeGoal(doomed));
+});
+test('tree layout keeps a single path on one level and indents only where the investigation forks',()=>{
+  const step=(n:number,parent?:number)=>({id:'s'+n,goalId:'g',parentStepId:parent===undefined?undefined:'s'+parent,sequence:n});
+  // 1 -> 2 -> 3, then 3 forks into 4 -> 5 and 6 -> 7; 7 forks again into 8 and 9.
+  const steps=[step(1),step(2,1),step(3,2),step(4,3),step(5,4),step(6,3),step(7,6),step(8,7),step(9,7)];
+  const ids=(parent:{kind:'goal'|'step';id:string})=>shownChildren(steps,parent).map(s=>s.id);
+  assert.deepEqual(ids({kind:'goal',id:'g'}),['s1','s2','s3']);assert.deepEqual(ids({kind:'step',id:'s1'}),[]);assert.deepEqual(ids({kind:'step',id:'s2'}),[]);
+  assert.deepEqual(ids({kind:'step',id:'s3'}),['s4','s5','s6','s7']);assert.deepEqual(ids({kind:'step',id:'s7'}),['s8','s9']);assert.deepEqual(ids({kind:'step',id:'s5'}),[]);
+  assert.deepEqual(steps.filter(s=>forks(steps,s.id)).map(s=>s.id),['s3','s7']);assert.deepEqual(steps.filter(s=>startsBranch(steps,s)).map(s=>s.id),['s4','s6','s8','s9']);
+  // Every step appears exactly once, and the parent used for reveal agrees with where it is listed.
+  const seen:string[]=[];const walk=(parent:{kind:'goal'|'step';id:string})=>{for(const s of shownChildren(steps,parent)){seen.push(s.id);assert.deepEqual(shownParent(steps,s),parent);walk({kind:'step',id:s.id});}};walk({kind:'goal',id:'g'});
+  assert.deepEqual(seen.sort(),steps.map(s=>s.id).sort());
+  // Depth is the number of forks above a step, not the number of steps: nine steps, two levels below the goal.
+  const depth=(s:{id:string;goalId:string;parentStepId?:string;sequence:number})=>{let n=0;for(let p=shownParent(steps,s);p.kind==='step';p=shownParent(steps,steps.find(x=>x.id===p.id)!)){n++;}return n;};
+  assert.deepEqual(steps.map(depth),[0,0,0,1,1,1,1,2,2]);
+  // Two first steps under one goal are both listed at the goal level.
+  assert.deepEqual(shownChildren([step(1),step(2,1),step(3)],{kind:'goal',id:'g'}).map(s=>s.id),['s1','s2','s3']);
 });
