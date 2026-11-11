@@ -8,9 +8,10 @@
 - [프로젝트 기준 문서](https://app.notion.com/p/415f5e6cf89781fe8869eb64ec3e0e8d)
 - [Work Item · 기능 브랜치와 main 인계 통합](https://app.notion.com/p/415f5e6cf89781518053ca7f6efad824)
 - [Dev Log · 기능 브랜치와 main 인계 통합](https://app.notion.com/p/415f5e6cf89781129c62dc869a5d7240)
+- [GitHub PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1)을 프로젝트 기준 문서와 Dev Log에 연결했다.
 - Project Areas 5개를 생성해 프로젝트와 연결했다.
 - 프로젝트 페이지에서 Project Areas 5개, Work Item 1개, Dev Log 1개의 역관계를 재조회해 확인했다.
-- 부분 검증·미병합 상태이므로 Portfolio 항목은 생성하지 않았다.
+- 부분 검증·PR 검토 중 상태이므로 Portfolio 항목은 생성하지 않았다.
 
 ## 등록 대상과 운영 구조
 

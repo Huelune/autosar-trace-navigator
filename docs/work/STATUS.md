@@ -14,7 +14,8 @@
 - 원격 `main`의 현재 기준은 `076c155`이며 원본 구현 지시서와 인계 정정까지 포함한다.
 - Python 분석 연결과 후속 VS Code UX는 원격 `feat/repo-analysis-aa2e6b`에 있으며 아직 `main`에 병합되지 않았다.
 - [TASK-005](tasks/TASK-005.md)는 두 브랜치를 로컬 통합 브랜치에서 합치고 문서·배포물을 정리한 작업이다.
-  통합 브랜치는 원격에 push됐지만 PR·main 반영 전까지 아래 확장 기능을 원격 `main`의 현재 제공 기능으로 해석하지 않는다.
+  통합 브랜치는 [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1)로 검토 중이며 main 반영 전까지 아래 확장 기능을
+  원격 `main`의 현재 제공 기능으로 해석하지 않는다.
 
 ## 통합 브랜치에 구현된 것
 
@@ -52,10 +53,10 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-002](tasks/TASK-002.md) | P1 Python 분석 포트 연결 | 완료, 원격 기능 브랜치 (main 미반영) |
 | [TASK-003](tasks/TASK-003.md) | 원본 구현 지시서 누락 공유 복구 | 완료 (검증·공유는 연결 세션) |
 | [TASK-004](tasks/TASK-004.md) | 확장의 값 출처·실행 조건 후보 연결 | 완료, 원격 기능 브랜치 (main 미반영) |
-| [TASK-005](tasks/TASK-005.md) | 기능 브랜치와 main 인계 통합 | 완료, 원격 브랜치 (PR 미생성) |
+| [TASK-005](tasks/TASK-005.md) | 기능 브랜치와 main 인계 통합 | 완료, [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1) 검토 중 |
 | [TASK-006](tasks/TASK-006.md) | Notion 프로젝트·작업 이력 등록 준비 | 완료, 원격 브랜치 (Notion 외부 변경 없음) |
 | [TASK-007](tasks/TASK-007.md) | 검증된 작업 브랜치 자동 push 정책 | 완료, 원격 브랜치 |
-| [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 진행 중, 원격 브랜치 |
+| [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 완료, [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1) 검토 중 |
 
 P1의 다른 후보는 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import다.
 이들은 지금 구현하도록 승인된 범위가 아니다. 요청받은 항목만 별도 카드로 나누고 완료 조건부터 정한다.
