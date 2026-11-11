@@ -18,12 +18,15 @@ const { Writable } = require('node:stream');
   const executable = process.env.VSCODE_EXECUTABLE_PATH || path.join(process.env.LOCALAPPDATA || '', 'Programs/Microsoft VS Code/Code.exe');
   console.log('Host fixture:', base);
   const logHandle = await fs.open(path.join(base,'host.log'),'w');
-  const log = new Writable({write(chunk, _encoding, callback){logHandle.write(chunk).then(()=>{for(const line of chunk.toString().split(/\r?\n/)){if(line.startsWith('PASS ')||line.startsWith('AssertionError')){console.log(line);}}callback();},callback);}});
+  const log = new Writable({write(chunk, _encoding, callback){logHandle.write(chunk).then(()=>{for(const line of chunk.toString().split(/\r?\n/)){if(line.startsWith('PASS ')||line.startsWith('SKIP ')||line.startsWith('AssertionError')){console.log(line);}}callback();},callback);}});
   for (const phase of ['record', 'restart', 'untrusted']) {
     const userData = path.join(base, 'profile-' + phase), extensionsDir = path.join(base, 'extensions');
     const args = [workspace,'--new-window','--skip-welcome','--skip-release-notes','--disable-extensions','--user-data-dir',userData,'--extensions-dir',extensionsDir];
     if (phase !== 'untrusted') { args.push('--disable-workspace-trust'); }
     const testsPath=path.join(extension,'dist/test/host/index.js'), testEnv={...process.env,BRANCH_HOST_PHASE:phase,BRANCH_HOST_BASE:base};
+    // Engine link E2E uses the repository's own virtual environment when it exists; otherwise that part is skipped.
+    const python=path.join(repo,process.platform==='win32'?'.venv/Scripts/python.exe':'.venv/bin/python');
+    if(!testEnv.BRANCH_HOST_PYTHON&&await fs.access(python).then(()=>true,()=>false)){testEnv.BRANCH_HOST_PYTHON=python;}
     if(phase==='untrusted') {
       // test-electron 3.x always appends --disable-workspace-trust; use the real CLI without that flag.
       await fs.mkdir(path.join(userData,'User'),{recursive:true});

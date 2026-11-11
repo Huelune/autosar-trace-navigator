@@ -1,8 +1,9 @@
 import * as vscode from 'vscode';
 import * as path from 'node:path';
+import * as fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { CapturedCode, clone, CodeAnchor, InvestigationStep, statusLabels, Status } from './domain/model';
-import { InvestigationService, GoalInput } from './domain/investigationService';
+import { InvestigationService, GoalInput, StepLink } from './domain/investigationService';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
@@ -10,16 +11,17 @@ import { resolveAnchor, AnchorResolution } from './navigation/anchorResolver';
 import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
-import { DisabledTraceAnalysisPort } from './adapters/traceAnalysisPort';
+import { PythonTraceAnalysisPort } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; }
+export interface AnalysisSettings { python:string; paths:string[] }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
 interface SelectionSnapshot { uri:string; version:number; range:vscode.Range; snippet:string; before:string; after:string; }
 let active:InvestigationController|undefined;
 export class InvestigationController {
   service?:InvestigationService; store?:JsonStore; tree?:InvestigationTree; view?:vscode.TreeView<TreeEntry>;
-  readonly analysis=new DisabledTraceAnalysisPort(); readonly status=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,20);
+  readonly status=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,20);
   readonly details:DetailsPanel; lastResolution?:AnchorResolution; private root?:string; private prompts=defaultPrompts; private operations:Promise<unknown>=Promise.resolve();
   private decoration=vscode.window.createTextEditorDecorationType({backgroundColor:new vscode.ThemeColor('editor.findMatchHighlightBackground'),border:'1px solid',borderColor:new vscode.ThemeColor('editor.findMatchBorder')});
   constructor(private readonly context:vscode.ExtensionContext){
@@ -35,7 +37,10 @@ export class InvestigationController {
   async failed(error:unknown):Promise<void>{this.updateStatus();const action=await vscode.window.showErrorMessage(`분기 조사 작업 실패: ${error instanceof Error?error.message:'알 수 없는 오류'}`,this.service?.dirty?'저장 재시도':'복구 명령 확인');if(action==='저장 재시도'){void vscode.commands.executeCommand('branchInvestigation.retrySave');}}
   private snapshot():SelectionSnapshot|undefined{
     const editor=vscode.window.activeTextEditor;if(!editor||editor.selection.isEmpty){return undefined;}
-    const d=editor.document,r=new vscode.Range(editor.selection.start,editor.selection.end),all=d.getText(),start=d.offsetAt(r.start),end=d.offsetAt(r.end);
+    return this.snapshotOf(editor.document,new vscode.Range(editor.selection.start,editor.selection.end));
+  }
+  private snapshotOf(d:vscode.TextDocument,r:vscode.Range):SelectionSnapshot{
+    const all=d.getText(),start=d.offsetAt(r.start),end=d.offsetAt(r.end);
     return {uri:d.uri.toString(),version:d.version,range:r,snippet:d.getText(r),before:all.slice(Math.max(0,start-200),start),after:all.slice(end,end+200)};
   }
   private async capture(snapshot:SelectionSnapshot):Promise<CapturedCode>{
@@ -43,10 +48,10 @@ export class InvestigationController {
     return {snippet:snapshot.snippet,fileUri:pathToFileURL(real).href,relativePath:path.relative(await import('node:fs/promises').then(f=>f.realpath(this.root!)),real).replaceAll('\\','/'),range:{start:{line:snapshot.range.start.line,character:snapshot.range.start.character},end:{line:snapshot.range.end.line,character:snapshot.range.end.character}},documentVersion:snapshot.version,contextBefore:snapshot.before,contextAfter:snapshot.after};
   }
   private async goalInput():Promise<GoalInput|undefined>{const title=await this.prompts.input({title:'새 조사 목표',prompt:'목표 이름 (필수)',validateInput:v=>v.trim()&&v.length<=200?undefined:'목표 이름을 200자 이내로 입력하세요.'});if(!title?.trim()){return;}const description=await this.prompts.input({title:'목표 설명',prompt:'어떤 분기를 왜 통과하려고 하나요? (선택)',validateInput:v=>v.length<=65536?undefined:'설명이 너무 깁니다.'});return description===undefined?undefined:{title,description};}
-  private async add(capture:CapturedCode):Promise<void>{const service=this.ready(),before=service.document;let goal:GoalInput|undefined;if(!before.currentGoalId){goal=await this.goalInput();if(!goal){return;}}
+  private async add(capture:CapturedCode,link?:StepLink):Promise<void>{const service=this.ready(),before=service.document;let goal:GoalInput|undefined;if(!before.currentGoalId){goal=await this.goalInput();if(!goal){return;}}
     const reason=await this.prompts.input({title:'현재 조사에 추가',prompt:'이 코드를 선택한 이유 (필수)',validateInput:v=>v.trim()&&v.length<=65536?undefined:'이유를 입력하세요.'});if(!reason?.trim()){return;}
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
-    const stepId=await service.add(capture,reason,goal);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
+    const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
   }
   private async display(stepId:string,openSource:boolean,record=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
     this.details.show(step,anchor,'위치 확인 중…',d.evidence.filter(e=>e.stepId===step.id),service.dirty);
@@ -60,6 +65,40 @@ export class InvestigationController {
     }
     if(record){await service.select(stepId,openSource&&resolved.state==='verified');}
   }
+  /** Machine-scoped: a workspace file cannot choose which executable runs. Empty means the engine link is off. */
+  private analysisSettings=():AnalysisSettings=>{const c=vscode.workspace.getConfiguration('branchInvestigation');return {python:(c.get<string>('pythonPath')??'').trim(),paths:c.get<string[]>('analysisPaths')??[]};};
+  setAnalysisSettingsForTests(read:()=>AnalysisSettings):void{requireValue(this.context.extensionMode===vscode.ExtensionMode.Test,'분석 설정 교체는 Host 테스트에서만 허용합니다.');this.analysisSettings=read;}
+  /** Engine candidates are only offered. Nothing is recorded until the user picks one and gives a reason. */
+  private async related():Promise<void>{
+    this.ready();const editor=vscode.window.activeTextEditor;
+    requireValue(editor&&editor.document.uri.scheme==='file','C 파일의 함수 안에 커서를 두고 실행하세요.');
+    requireValue(!editor.document.isDirty,'저장하지 않은 변경이 있습니다. 엔진은 디스크의 파일을 읽으므로 저장한 뒤 다시 조회하세요.');
+    const {python,paths}=this.analysisSettings();
+    requireValue(python,'Python 분석 연결이 꺼져 있습니다. 사용자 설정 branchInvestigation.pythonPath에 분석 엔진이 설치된 Python 실행 파일을 지정하세요.');
+    requireValue(Array.isArray(paths)&&paths.length>0&&paths.every(p=>typeof p==='string'&&p.trim()),'분석 범위가 없습니다. 설정 branchInvestigation.analysisPaths에 작업 폴더 기준 경로를 지정하세요. 폴더 전체는 "." 입니다.');
+    const root=await fs.realpath(this.root!),file=path.relative(root,await sourcePath(this.root!,editor.document.uri.toString())).replaceAll('\\','/');
+    const result=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'분기 조사: 관련 후보 조회 중',cancellable:true},(_progress,token)=>{
+      const abort=new AbortController();token.onCancellationRequested(()=>abort.abort());
+      return new PythonTraceAnalysisPort(python).related({root,file,line:editor.selection.active.line,includePaths:paths},abort.signal);
+    });
+    if(!result.functionName){void vscode.window.showInformationMessage('커서가 분석된 함수 안에 있지 않습니다.');return;}
+    if(!result.candidates.length){void vscode.window.showInformationMessage('이 함수에서 분석 범위 안의 호출·RTE 후보를 찾지 못했습니다. 범위 밖에 없다는 뜻은 아닙니다.');return;}
+    const kinds={call:'호출',rte_data:'RTE 데이터'};
+    const items=result.candidates.map(c=>({label:`${kinds[c.relation]}: ${c.label}`,description:c.target?`${c.functionName??''} · ${c.target.path}:${c.target.startLine+1}`:'분석 범위 안에서 정의를 찾지 못함',detail:c.uncertainty.join(', '),candidate:c}));
+    const options={title:`${result.functionName}의 관련 후보${result.truncated?' (일부만 표시)':''} — 이름 기반 후보이며 실제 연결·실행 순서가 아닙니다.`,matchOnDescription:true,matchOnDetail:true};
+    const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
+    if(!picked){return;}
+    const target=picked.candidate.target;
+    requireValue(target,'분석 범위 안에서 정의를 찾지 못한 후보입니다. 분석 범위를 넓혀 다시 조회하세요.');
+    const {text,startCharacter,endCharacter}=target;
+    requireValue(text!==null&&startCharacter!==null&&endCharacter!==null,'위치 확인 필요: 파일 인코딩을 확인할 수 없어 이동하지 않습니다. 소스를 직접 열어 범위를 선택한 뒤 추가하세요.');
+    // Error text from the file system may contain a path; report the kind only.
+    const real=await sourcePath(this.root!,pathToFileURL(path.join(root,target.path)).href).catch(()=>{throw new Error('위치 확인 필요: 후보 파일을 열 수 없습니다. 분석 범위와 파일을 확인하세요.');});
+    const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real)),range=new vscode.Range(target.startLine,startCharacter,target.endLine,endCharacter),same=(s:string)=>s.replaceAll('\r\n','\n');
+    requireValue(doc.validateRange(range).isEqual(range)&&same(doc.getText(range))===same(text),'위치 확인 필요: 편집기 내용이 분석한 내용과 다릅니다. 파일을 저장하거나 인코딩을 확인한 뒤 다시 조회하세요.');
+    const shown=await vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:range});shown.setDecorations(this.decoration,[range]);
+    await this.add(await this.capture(this.snapshotOf(doc,range)),{type:picked.candidate.relation==='call'?'call':'data_dependency',uncertainty:picked.candidate.uncertainty});
+  }
   private stepId(arg:unknown):string{const candidate=typeof arg==='string'?arg:arg&&typeof arg==='object'?(arg as {id?:unknown}).id:undefined;const value=candidate??this.ready().document.currentStepId;requireValue(validId(value),'조사단계를 선택하세요.');return value;}
   register():void{
     const command=(name:string,action:(arg:unknown,snapshot?:SelectionSnapshot)=>Promise<unknown>,capture=false)=>this.context.subscriptions.push(vscode.commands.registerCommand('branchInvestigation.'+name,(arg:unknown)=>{
@@ -68,6 +107,7 @@ export class InvestigationController {
     command('addSelection',async(_arg,snapshot)=>{this.ready();requireValue(snapshot,'선택한 코드가 없습니다. C/H 코드 범위를 선택하거나 수동 스니펫을 붙여넣으세요.');await this.add(await this.capture(snapshot));},true);
     command('createGoal',async(_arg,snapshot)=>{const service=this.ready(),capture=snapshot?await this.capture(snapshot):manual();const input=await this.goalInput();if(input){await service.createGoal(input,capture);}},true);
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
+    command('traceRelated',async()=>this.related());
     command('openStep',async arg=>this.display(this.stepId(arg),true,true));
     command('editStep',async arg=>this.display(this.stepId(arg),false));
     command('switchGoal',async arg=>{const service=this.ready();let target=typeof arg==='string'?arg:undefined;if(!target){target=(await vscode.window.showQuickPick(service.document.goals.map(g=>({label:g.title,id:g.id})),{title:'조사 목표 전환'}))?.id;}if(target){await service.switchGoal(target);}});

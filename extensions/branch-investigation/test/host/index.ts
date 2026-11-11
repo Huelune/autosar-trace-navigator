@@ -18,7 +18,7 @@ export async function run():Promise<void>{
   try{
     if(phase==='restart'){
       const expected=JSON.parse(await fs.readFile(path.join(base,'expected.json'),'utf8'));const d=service.document;
-      assert.equal(d.steps.length,expected.steps);assert.equal(d.currentStepId,expected.current);assert.equal(d.evidence[0].executionLabel,'CT-가상-01');assert.ok(d.steps.some(s=>s.status==='deferred'&&s.nextAction.includes('갱신 순서')));assert.ok(d.steps.some(s=>s.snippet.includes('수동')));assert.equal(d.revision,expected.revision);assert.equal(app.analysis.available,false);console.log('PASS Host: restart restores goal / current step / alternatives / evidence');return;
+      assert.equal(d.steps.length,expected.steps);assert.equal(d.currentStepId,expected.current);assert.equal(d.evidence[0].executionLabel,'CT-가상-01');assert.ok(d.steps.some(s=>s.status==='deferred'&&s.nextAction.includes('갱신 순서')));assert.ok(d.steps.some(s=>s.snippet.includes('수동')));assert.equal(d.revision,expected.revision);console.log('PASS Host: restart restores goal / current step / alternatives / evidence');return;
     }
     // Real command captures selection before the first prompt. Only prompt answers are deterministic.
     const original=await select('unicode.c','/*한글 😀*/ if (a < 60) return 0;\r\n  else return 1;');
@@ -38,6 +38,17 @@ export async function run():Promise<void>{
     const count=[service.document.steps.length,service.document.relations.length];await command('navigateBack');await command('navigateForward');await command('openStep',writer);assert.deepEqual([service.document.steps.length,service.document.relations.length],count);
     assert.equal(resolutionState(),'verified');assert.equal(vscode.window.activeTextEditor!.document.uri.fsPath.toLowerCase(),path.join(root,'producer.c').toLowerCase());assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),'Rte_Write_Struct_State(&built)');
     console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward');
+    if(process.env.BRANCH_HOST_PYTHON){
+      // The real engine process on the virtual workspace. Candidates are only offered; a pick plus a reason records a step.
+      app.setAnalysisSettingsForTests(()=>({python:process.env.BRANCH_HOST_PYTHON!,paths:['.']}));await select('consumer.c','Rte_Read_Struct_State(&b)');
+      let offered:string[]=[];app.setPromptsForTests({input:async()=>'엔진 후보의 Writer 조사',snippet:async()=>undefined,pick:async items=>{offered=items.map(i=>i.label);return undefined;}});
+      const quiet=service.document.revision;await command('traceRelated');assert.equal(service.document.revision,quiet);assert.ok(offered.some(l=>l.startsWith('RTE 데이터')),'RTE candidate offered');
+      app.setPromptsForTests({input:async()=>'엔진 후보의 Writer 조사',snippet:async()=>undefined,pick:async items=>items.find(i=>i.label.startsWith('RTE 데이터'))});await command('traceRelated');
+      const linked=service.document.steps.find(s=>s.id===service.document.currentStepId)!,edge=service.document.relations.find(r=>r.toStepId===linked.id)!;
+      assert.equal(linked.parentStepId,writer);assert.equal(edge.type,'data_dependency');assert.ok(edge.uncertainty.includes('name_only_connection'));assert.match(linked.snippet,/^Rte_Write_Struct_State\(/);
+      assert.equal(vscode.window.activeTextEditor!.document.uri.fsPath.toLowerCase(),path.join(root,'producer.c').toLowerCase());assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),linked.snippet);
+      console.log('PASS Host: engine candidates offered / cancel records nothing / picked RTE writer becomes a linked step');
+    }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     const edited=await select('unicode.c','else return 1;');await edited.editor.edit(b=>b.insert(new vscode.Position(0,0),'// unsaved\r\n'));assert.equal(edited.doc.isDirty,true);await command('openStep',first.id);assert.equal(resolutionState(),'needs_review');assert.equal(service.document.steps[0].snippet,original.snippet);
     await fs.unlink(path.join(root,'producer.c'));await command('openStep',writer);assert.equal(resolutionState(),'missing');
     app.setPromptsForTests({input:async()=> '파일 미연결 수동 조사',snippet:async()=> '수동 스니펫\n조건 가설'});await command('addSnippet');const manual=service.document.steps.at(-1)!;assert.equal(manual.snippet,'수동 스니펫\n조건 가설');await command('openStep',manual.id);assert.equal(resolutionState(),'snippet_only');

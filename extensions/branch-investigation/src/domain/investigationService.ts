@@ -1,8 +1,10 @@
-import { CapturedCode, clone, CodeAnchor, Evidence, fingerprint, id, InvestigationStep, now, Status, WorkspaceDocument } from './model';
+import { CapturedCode, clone, CodeAnchor, Evidence, fingerprint, id, InvestigationStep, now, RelationEdge, Status, WorkspaceDocument } from './model';
 import { nonempty, requireValue, validate, validStatus } from './validation';
 import { visit } from '../navigation/history';
 export interface InvestigationRepository { save(d: WorkspaceDocument, expected: number): Promise<WorkspaceDocument> }
 export interface GoalInput { title: string; description: string }
+/** How an analysis candidate, picked by the user, relates the new step to its parent. Still a candidate, not a proven link. */
+export interface StepLink { type: Exclude<RelationEdge['type'], 'manual'>; uncertainty: readonly string[] }
 export type StepEdit = Pick<InvestigationStep, 'reason'|'hypothesis'|'observation'|'requiredConditions'|'derivedConditions'|'result'|'nextAction'|'status'>;
 /** Pure investigation domain, independent of VS Code and the Python parser. */
 export class InvestigationService {
@@ -25,13 +27,13 @@ export class InvestigationService {
   }
   private goal(d: WorkspaceDocument, input: GoalInput, capture: CapturedCode): string { nonempty(input.title, 200); const anchor = this.anchor(d, capture), time = now(), goalId = id(); d.goals.push({ id: goalId, title: input.title.trim(), description: input.description, target: { anchorId: anchor.id, kind: 'manual' }, createdAt: time, updatedAt: time }); d.currentGoalId = goalId; d.currentStepId = undefined; return goalId; }
   createGoal(input: GoalInput, capture: CapturedCode): Promise<string> { return this.change(d => this.goal(d, input, capture)); }
-  async add(capture: CapturedCode, reason: string, newGoal?: GoalInput): Promise<string> {
+  async add(capture: CapturedCode, reason: string, newGoal?: GoalInput, link?: StepLink): Promise<string> {
     nonempty(reason); nonempty(capture.snippet, 262144);
     return this.change(d => {
       if (newGoal) { this.goal(d, newGoal, capture); } const goal = d.goals.find(g => g.id === d.currentGoalId); requireValue(goal, '조사 목표를 먼저 만드세요.');
       const anchor = this.anchor(d, capture), stepId = id(), time = now(), parent = d.currentStepId;
       const step: InvestigationStep = { id: stepId, goalId: goal.id, parentStepId: parent, sequence: Math.max(0, ...d.steps.filter(s => s.goalId === goal.id).map(s => s.sequence)) + 1, reason: reason.trim(), goalSnapshot: { title: goal.title, description: goal.description, target: clone(goal.target), anchor: clone(d.anchors.find(a => a.id === goal.target.anchorId)!) }, hypothesis: '', observation: '', requiredConditions: '', derivedConditions: '', result: '', nextAction: '', status: 'investigating', codeAnchorId: anchor.id, snippet: capture.snippet, createdAt: time, updatedAt: time };
-      d.steps.push(step); if (parent) { d.relations.push({ id: id(), fromStepId: parent, toStepId: stepId, type: 'manual', evidence: step.reason, uncertainty: ['investigation_order_is_not_execution_order'] }); }
+      d.steps.push(step); if (parent) { d.relations.push({ id: id(), fromStepId: parent, toStepId: stepId, type: link?.type ?? 'manual', evidence: step.reason, uncertainty: [...(link?.uncertainty ?? []), 'investigation_order_is_not_execution_order'] }); }
       visit(d, { goalId: goal.id, stepId, anchorId: anchor.id }, 'select_step'); return stepId;
     });
   }

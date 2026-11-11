@@ -4,8 +4,10 @@
 
 `extensions/branch-investigation`은 TypeScript 확장이다. TreeView/Webview/명령 → InvestigationService →
 JSON 저장소와 AnchorResolver/NavigationHistory를 사용한다. 기록은 `.branch-investigation/workspace.json`에 저장하며
-기존 Trace 모델·SQLite와 분리한다. P0는 Python 프로세스를 실행하지 않는다.
-P1용 TraceAnalysisPort는 기존 Workbench/ProjectSnapshot의 호출·RTE·값·조건 API 재사용 경계이며 기본 비활성이다.
+기존 Trace 모델·SQLite와 분리한다. 기본 설정에서는 Python 프로세스를 실행하지 않는다.
+사용자가 Python 경로를 설정하면 TraceAnalysisPort가 요청마다 `autosar_trace_navigator.bridge`를 한 번 실행해
+커서 함수의 호출·RTE Writer 후보를 JSON으로 받는다. bridge는 analyze_project와 function_candidates를 재사용하고
+Tkinter·SQLite를 불러오지 않는다. 후보는 사용자가 골라 이유를 적을 때만 조사 단계가 된다. 값·조건 후보는 미연결이다.
 자세한 [설치·설계·검증 안내](../extensions/branch-investigation/README.md)를 참고한다.
 
 ## 예정된 데이터 흐름
