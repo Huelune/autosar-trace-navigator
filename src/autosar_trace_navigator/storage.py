@@ -3,7 +3,7 @@
 from dataclasses import asdict, dataclass
 import json
 import os
-from pathlib import Path
+from pathlib import Path, PurePath, PurePosixPath, PureWindowsPath
 import sqlite3
 from types import TracebackType
 
@@ -27,9 +27,21 @@ class StoredTrace:
 
 
 def _encode_path(value: object) -> str:
-    if isinstance(value, Path):
+    if isinstance(value, PurePath):
         return str(value)
     raise TypeError(f"Unsupported snapshot value: {type(value).__name__}")
+
+
+def _decode_path(value: str) -> PurePath:
+    """Keep foreign absolute paths portable until a project rebinds the source."""
+    native = Path(value)
+    if native.is_absolute():
+        return native
+    windows = PureWindowsPath(value)
+    if windows.is_absolute():
+        return windows
+    posix = PurePosixPath(value)
+    return posix if posix.is_absolute() else native
 
 
 def _uses_member_paths(session: TraceSession) -> bool:
@@ -48,7 +60,7 @@ def _uses_member_paths(session: TraceSession) -> bool:
 
 def _decode(payload: str) -> TraceSession:
     def span(value: dict) -> SourceRange:
-        return SourceRange(**{**value, "path": Path(value["path"])})
+        return SourceRange(**{**value, "path": _decode_path(value["path"])})
 
     def function(value: dict) -> FunctionDefinition:
         return FunctionDefinition(**{

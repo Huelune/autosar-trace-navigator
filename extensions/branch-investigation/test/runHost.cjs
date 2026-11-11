@@ -7,7 +7,10 @@ const { Writable } = require('node:stream');
 (async () => {
   const extension = path.resolve(__dirname, '..'), repo = path.resolve(extension, '../..');
   const developmentPath=process.env.BRANCH_EXTENSION_PATH||extension;
-  const base = await fs.mkdtemp(path.join(repo, 'build', 'branch-host-'));
+  // VS Code derives a Unix-domain socket path from --user-data-dir. Keeping the
+  // host fixture under a deep checkout can exceed macOS's 103-byte socket limit.
+  const hostRoot = process.env.BRANCH_HOST_TMP || (process.platform === 'darwin' ? '/private/tmp' : path.join(repo, 'build'));
+  const base = await fs.realpath(await fs.mkdtemp(path.join(hostRoot, 'branch-host-')));
   const workspace = path.join(base, 'workspace'); await fs.mkdir(workspace);
   for (const name of ['consumer.c', 'producer.c', 'struct_paths.h', 'Rte_StructPaths.h']) {
     await fs.copyFile(path.join(repo, 'test/struct_paths', name), path.join(workspace, name));

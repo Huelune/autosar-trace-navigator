@@ -1,8 +1,16 @@
 # Notion 등록 준비안
 
 이 문서는 `autosar-trace-navigator`의 프로젝트 문서와 개발 작업 이력을 개발 포트폴리오 Notion에
-중복 없이 등록하기 위한 실행 기준이다. 2026-11-12 KST에 실제 데이터 소스 스키마와 기존 항목을 조회해 작성했다.
-아직 Notion 페이지를 생성하거나 수정하지 않았다.
+중복 없이 등록한 기준과 검증 결과다. 2026-11-12 KST에 실제 데이터 소스 스키마와 기존 항목을 조회하고 등록했다.
+
+## 실제 등록 결과
+
+- [프로젝트 기준 문서](https://app.notion.com/p/415f5e6cf89781fe8869eb64ec3e0e8d)
+- [Work Item · 기능 브랜치와 main 인계 통합](https://app.notion.com/p/415f5e6cf89781518053ca7f6efad824)
+- [Dev Log · 기능 브랜치와 main 인계 통합](https://app.notion.com/p/415f5e6cf89781129c62dc869a5d7240)
+- Project Areas 5개를 생성해 프로젝트와 연결했다.
+- 프로젝트 페이지에서 Project Areas 5개, Work Item 1개, Dev Log 1개의 역관계를 재조회해 확인했다.
+- 부분 검증·미병합 상태이므로 Portfolio 항목은 생성하지 않았다.
 
 ## 등록 대상과 운영 구조
 
@@ -17,7 +25,7 @@
 | 완료 작업 이력 | [Dev Logs](https://app.notion.com/p/92da26d1e1ea4b6c894c50941a0da011) | `collection://ca5ee476-94be-4d39-9d86-1965b5170bc4` |
 | 대표 성과 | [Portfolio](https://app.notion.com/p/b0d5ab90097746a3b7e500ff8471332f) | `collection://ecf3f374-3d2c-457d-a044-05f4e0752139` |
 
-## 중복 조회 결과
+## 등록 전 중복 조회 결과
 
 다음 조건을 각 데이터 소스에서 조회했으며 일치 항목이 없었다.
 
