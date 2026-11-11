@@ -7,6 +7,8 @@ AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보�
 실제로 한 일과 검증·다음 행동은 세션별 기록에 남겨 Git으로 공유합니다.
 
 **VS Code 조사 확장 P0**는 [extensions/branch-investigation](extensions/branch-investigation/README.md)에 있습니다.
+무엇을 구현하는지는 **[원본 구현 지시서](docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md)**,
+완료된 P0와 다음 작업을 함께 읽는 방법은 [구현 인수인계](docs/branch-investigation/README.md)를 참고하세요.
 코드 선택·이유 저장 → 조사 트리 → 상세·정확한 소스 재방문을 VS Code 안에서 제공하며 P0는 Python 없이 동작합니다.
 아래 Python/Tkinter 도구와 저장소는 그대로 유지합니다.
 현재 **STEP 1: 프로젝트 구조 및 Python 환경**과 사용자 요청에 따른

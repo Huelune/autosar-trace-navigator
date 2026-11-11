@@ -21,7 +21,9 @@
 1. `git status --short`, `git log -5 --oneline`을 확인한다. 사용자 변경은 그대로 보존한다.
 2. 사용자가 공유 갱신을 요청한 경우 `git fetch origin` 후 대상 브랜치/커밋을 확인한다.
    깨끗한 해당 브랜치에만 `git pull --ff-only`를 사용한다. 분기되면 자동 reset/force하지 말고 변경을 비교한다.
-3. `AGENTS.md`, `STATUS.md`, 배정받은 작업 카드와 최신 연결 세션을 읽는다. 실제 코드와 기록이 다르면 차이를 기록한다.
+3. `AGENTS.md`, `STATUS.md`, 배정받은 작업 카드와 최신 연결 세션을 읽는다.
+   VS Code 작업은 [원본 구현 지시서와 P0 결과](../branch-investigation/README.md)를 함께 읽는다.
+   실제 코드와 기록이 다르면 차이를 기록한다.
 4. 카드의 담당·브랜치·상태를 갱신하고 세션을 만든다. 새 브랜치는 기본 `codex/<ID>-<짧은주제>`를 사용한다.
    `git switch -c ...`는 현재 변경·브랜치·원하는 기준 커밋을 확인한 다음에만 수행한다.
 5. 구현 전 범위와 검증 계획을 알린다. 승인받은 작업만 진행한다.
@@ -68,6 +70,8 @@ STATUS/CHANGELOG 충돌은 양쪽 내용을 읽어 해결하며 한쪽 파일로
 ```text
 이 저장소의 AGENTS.md, CONTRIBUTING.md, docs/work/README.md, docs/work/STATUS.md와
 docs/work/tasks/<작업ID>.md 및 그 카드에 연결된 최신 세션을 읽어줘.
+VS Code 작업이면 docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md와 P0_구현_검증결과.md도
+docs/branch-investigation/ 폴더에서 읽고, 원래 요구사항과 이미 완료된 P0를 구분해줘.
 Git 상태·현재 브랜치·기준 커밋과 실제 구현부터 확인하고 사용자 변경은 보존해줘.
 이번 작업은 <작업ID>의 <구체적 범위>로 제한해줘. 계획만 있는 다른 카드는 구현하지 마.
 작업 카드의 담당/상태와 새로운 세션 파일에 진행·실행한 검증·미검증·다음 행동을 남겨줘.

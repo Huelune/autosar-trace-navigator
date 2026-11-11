@@ -10,6 +10,8 @@
 ## 목적과 승인 범위
 
 VS Code에서 기존 Python 분석 엔진의 후보 조회를 재사용하는 P1 후속 후보.
+요구사항은 [원본 구현 지시서](../../branch-investigation/05_Codex_VSCode확장_구현지시서.md)의 3·6·10·11절과
+[P0 결과](../../branch-investigation/P0_구현_검증결과.md)를 함께 읽는다. 원문을 이 카드의 요약으로 대체하지 않는다.
 **계획 카드이며 이번 공유 구성 요청으로 구현을 승인받은 것은 아니다.**
 배정받으면 사용자가 원하는 최초 조회 범위(함수 검색/호출/RTE/값/조건 중 무엇)를 확정하고 이 카드를 좁힌다.
 기존 포트는 `extensions/branch-investigation/src/adapters/traceAnalysisPort.ts`이며 Python 분석을 TS로 중복 구현하지 않는다.
