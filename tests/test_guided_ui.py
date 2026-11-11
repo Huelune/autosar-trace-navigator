@@ -1,5 +1,6 @@
 """Verify user decisions and usable compact layout with real Tk widgets."""
 
+import gc
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -18,6 +19,8 @@ class GuidedUiTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
     def test_initial_guidance_and_disabled_actions_do_not_open_error_dialogs(self):
         self.assertIn("루트 폴더 선택", self.app.workflow_hint.get())

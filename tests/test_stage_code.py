@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import tempfile
+import gc
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -25,6 +26,8 @@ class StageCodeTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
     def reference(self):
         return (self.app.source.get("1.0", "end"), self.app.source.yview(),

@@ -2,6 +2,7 @@
 
 from pathlib import Path
 import tempfile
+import gc
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -37,6 +38,8 @@ class WorkspaceUiTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
     def test_multiple_condition_variables_require_choice_and_use_the_selected_identifier_site(self):
         self.assertEqual(self.app.variable_entry["values"], ("eligible", "pedal"))

@@ -3,6 +3,7 @@
 from hashlib import sha256
 from pathlib import Path
 import tempfile
+import gc
 import tkinter as tk
 import unittest
 
@@ -112,6 +113,8 @@ class TutorialTests(unittest.TestCase):
             finally:
                 app.workbench.dirty = False
                 app.close()
+                del app, root
+                gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
 
 if __name__ == "__main__":
