@@ -111,6 +111,18 @@
         "category": "분기 조사"
       },
       {
+        "command": "branchInvestigation.deleteStep",
+        "title": "단계 삭제 (하위 포함)",
+        "category": "분기 조사",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "branchInvestigation.deleteGoal",
+        "title": "목표 삭제 (단계 포함)",
+        "category": "분기 조사",
+        "icon": "$(trash)"
+      },
+      {
         "command": "branchInvestigation.retrySave",
         "title": "저장 재시도",
         "category": "분기 조사"
@@ -210,6 +222,26 @@
         {
           "command": "branchInvestigation.repairAnchor",
           "when": "view == branchInvestigation.tree && viewItem == step"
+        },
+        {
+          "command": "branchInvestigation.deleteStep",
+          "when": "view == branchInvestigation.tree && viewItem == step",
+          "group": "z_delete"
+        },
+        {
+          "command": "branchInvestigation.deleteGoal",
+          "when": "view == branchInvestigation.tree && viewItem == goal",
+          "group": "z_delete"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "branchInvestigation.deleteStep",
+          "when": "false"
+        },
+        {
+          "command": "branchInvestigation.deleteGoal",
+          "when": "false"
         }
       ]
     },

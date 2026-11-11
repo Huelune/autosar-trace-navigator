@@ -13,7 +13,7 @@ import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
 import { PythonTraceAnalysisPort } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; confirm?(message:string):Thenable<boolean>; }
 export interface AnalysisSettings { python:string; paths:string[] }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
@@ -122,6 +122,14 @@ export class InvestigationController {
     command('goParent',async()=>{const service=this.ready(),d=service.document,parent=d.steps.find(s=>s.id===d.currentStepId)?.parentStepId;requireValue(parent,'현재 단계의 상위 조사가 없습니다.');await this.display(parent,true,true);});
     for(const [name,delta] of [['navigateBack',-1],['navigateForward',1]] as const){command(name,async()=>{const stepId=await this.ready().navigate(delta);if(stepId){await this.display(stepId,true,false);}});}
     command('repairAnchor',async(arg,snapshot)=>{const stepId=this.stepId(arg);requireValue(snapshot,'재연결할 파일의 코드 범위를 선택하세요.');const capture=await this.capture(snapshot);if(await vscode.window.showWarningMessage('이 범위로 위치만 재연결할까요? 저장 당시 스니펫과 목표는 유지합니다.',{modal:true},'재연결')==='재연결'){await this.ready().repair(stepId,capture);await this.display(stepId,false);}},true);
+    // Deleting is the only command that discards records, so it always asks first and says how far it reaches.
+    const confirm=async(message:string)=>this.prompts.confirm?this.prompts.confirm(message):await vscode.window.showWarningMessage(message,{modal:true,detail:'근거와 방문 이력도 함께 지웁니다. 지운 직후에는 "마지막 정상 백업 복구"로 되돌릴 수 있습니다.'},'지우기')==='지우기';
+    const afterDelete=async()=>{const current=this.ready().document.currentStepId;if(current){await this.display(current,false);}else{this.details.dispose();}};
+    command('deleteStep',async arg=>{const stepId=this.stepId(arg),d=this.ready().document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');
+      let below=0,layer=[stepId];while(layer.length){layer=d.steps.filter(s=>s.parentStepId&&layer.includes(s.parentStepId)).map(s=>s.id);below+=layer.length;}
+      if(await confirm(`${step.sequence}번 단계${below?`와 하위 단계 ${below}개`:''}를 지울까요?`)){await this.ready().removeStep(stepId);await afterDelete();}});
+    command('deleteGoal',async arg=>{const d=this.ready().document,goalId=(arg&&typeof arg==='object'?(arg as {id?:unknown}).id:arg)??d.currentGoalId,goal=d.goals.find(g=>g.id===goalId);requireValue(goal,'지울 목표를 트리에서 선택하세요.');
+      if(await confirm(`목표 "${goal.title}"과 단계 ${d.steps.filter(s=>s.goalId===goal.id).length}개를 지울까요?`)){await this.ready().removeGoal(goal.id);await afterDelete();}});
     command('retrySave',async()=>{await this.ready().retrySave();const current=this.ready().document.currentStepId;if(current){await this.display(current,false);}});
     command('recoverBackup',async()=>{requireValue(this.store,'저장 폴더가 없습니다.');if(await vscode.window.showWarningMessage('현재 파일은 보존하고 마지막 정상 백업을 복구할까요?',{modal:true},'백업 복구')==='백업 복구'){const d=await this.store.recoverBackup();this.view?.dispose();this.tree?.dispose();this.attach(new InvestigationService(d,this.store));if(d.currentStepId){await this.display(d.currentStepId,false);}}});
     command('recoverLock',async()=>{requireValue(this.store,'저장 폴더가 없습니다.');if(await vscode.window.showWarningMessage('소유 프로세스의 종료를 확인한 잠금만 복구합니다. 진행할까요?',{modal:true},'종료 확인 후 복구')==='종료 확인 후 복구'){await this.store.recoverStaleLock();await this.initialize();}});

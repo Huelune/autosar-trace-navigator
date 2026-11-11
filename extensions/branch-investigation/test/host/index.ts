@@ -63,6 +63,13 @@ export async function run():Promise<void>{
       assert.equal(conditionStep.snippet,'(a < 60)');assert.equal(conditionEdge.type,'manual');assert.ok(conditionEdge.uncertainty.includes('execution_requirement_true'));assert.ok(conditionEdge.uncertainty.includes('condition_satisfiability_not_proven'));
       console.log('PASS Host: cursor variable value sources first / execution condition with needed truth recorded as prerequisite');
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
+    // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
+    {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async m=>{asked=m;return false;}});await command('deleteStep',{kind:'step',id:target.id});assert.ok(asked.includes(`${target.sequence}번 단계`));assert.equal(service.document.revision,before.revision);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async()=>true});await command('deleteStep',{kind:'step',id:target.id});assert.ok(!service.document.steps.some(s=>s.id===target.id));assert.equal(service.document.steps.length,before.steps.length-1);
+      app.setPromptsForTests({input:async()=>'지울 목표의 단계',snippet:async()=>'임시 메모',confirm:async()=>true});await command('createGoal');const extra=service.document.currentGoalId!;assert.notEqual(extra,before.currentGoalId);
+      await command('deleteGoal',{kind:'goal',id:extra});assert.ok(!service.document.goals.some(g=>g.id===extra));assert.equal(service.document.currentGoalId,undefined);await command('switchGoal',before.currentGoalId);await command('openStep',writer);
+      console.log('PASS Host: delete asks first / declined keeps everything / step subtree and goal removed');}
     const edited=await select('unicode.c','else return 1;');await edited.editor.edit(b=>b.insert(new vscode.Position(0,0),'// unsaved\r\n'));assert.equal(edited.doc.isDirty,true);await command('openStep',first.id);assert.equal(resolutionState(),'needs_review');assert.equal(service.document.steps[0].snippet,original.snippet);
     await fs.unlink(path.join(root,'producer.c'));await command('openStep',writer);assert.equal(resolutionState(),'missing');
     app.setPromptsForTests({input:async()=> '파일 미연결 수동 조사',snippet:async()=> '수동 스니펫\n조건 가설'});await command('addSnippet');const manual=service.document.steps.at(-1)!;assert.equal(manual.snippet,'수동 스니펫\n조건 가설');await command('openStep',manual.id);assert.equal(resolutionState(),'snippet_only');

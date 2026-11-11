@@ -44,4 +44,31 @@ export class InvestigationService {
   status(stepId: string, status: Status): Promise<void> { const s = this.value.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); return this.edit(stepId, { ...s, status }); }
   evidence(stepId: string, evidence: Omit<Evidence, 'id'|'stepId'>): Promise<void> { return this.change(d => { requireValue(d.steps.some(s => s.id === stepId), '단계가 없습니다.'); d.evidence.push({ ...clone(evidence), id: id(), stepId }); }); }
   repair(stepId: string, capture: CapturedCode): Promise<void> { return this.change(d => { const s = d.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); requireValue(capture.fileUri && capture.range, '재연결에는 파일 선택 범위가 필요합니다.'); s.codeAnchorId = this.anchor(d, capture).id; s.updatedAt = now(); }); }
+  /** Remove steps (and optionally their goal) with everything that points at them, so the document stays valid. */
+  private drop(d: WorkspaceDocument, gone: Set<string>, goalId?: string): void {
+    // Anchors the removed records own. Anchors left behind by an earlier re-link belong to no record and are not touched.
+    const owned = new Set([...d.steps.filter(s => gone.has(s.id)).map(s => s.codeAnchorId), ...d.evidence.filter(e => gone.has(e.stepId)).map(e => e.anchorId), ...d.goals.filter(g => g.id === goalId).map(g => g.target.anchorId)]);
+    d.steps = d.steps.filter(s => !gone.has(s.id)); if (goalId) { d.goals = d.goals.filter(g => g.id !== goalId); }
+    d.relations = d.relations.filter(r => !gone.has(r.fromStepId) && !gone.has(r.toStepId)); d.evidence = d.evidence.filter(e => !gone.has(e.stepId));
+    d.navigationEvents = d.navigationEvents.filter(e => !(e.stepId && gone.has(e.stepId)) && !(goalId && e.goalId === goalId));
+    // The visit cursor stays on the nearest surviving visit at or before where it was.
+    const kept = d.visits.map((v, i) => ({ v, i })).filter(x => !gone.has(x.v.stepId));
+    d.visitCursor = kept.length ? Math.max(0, kept.filter(x => x.i <= d.visitCursor).length - 1) : -1; d.visits = kept.map(x => x.v);
+    const used = new Set([...d.goals.map(g => g.target.anchorId), ...d.steps.map(s => s.codeAnchorId), ...d.evidence.map(e => e.anchorId), ...d.navigationEvents.map(e => e.toAnchorId), ...d.visits.map(v => v.anchorId)]);
+    const unused = new Set([...owned].filter(a => a !== undefined && !used.has(a)));
+    // A surviving visit event may only remember that it came from deleted code; forget that origin rather than keep the deleted anchor.
+    for (const e of d.navigationEvents) { if (e.fromAnchorId && unused.has(e.fromAnchorId)) { e.fromAnchorId = undefined; } }
+    d.anchors = d.anchors.filter(a => !unused.has(a.id)); const nodes = new Set(d.anchors.map(a => a.codeNodeId)); d.codeNodes = d.codeNodes.filter(n => nodes.has(n.id));
+  }
+  /** Delete a step with its whole subtree, evidence and visits. The current step moves to the parent when it was inside. */
+  removeStep(stepId: string): Promise<number> { return this.change(d => {
+    const root = d.steps.find(s => s.id === stepId); requireValue(root, '단계가 없습니다.');
+    const gone = new Set([stepId]); let grew = true; while (grew) { grew = false; for (const s of d.steps) { if (s.parentStepId && gone.has(s.parentStepId) && !gone.has(s.id)) { gone.add(s.id); grew = true; } } }
+    this.drop(d, gone); if (d.currentStepId && gone.has(d.currentStepId)) { d.currentStepId = root.parentStepId; } return gone.size;
+  }); }
+  /** Delete a goal with all its steps. No other goal becomes current by itself. */
+  removeGoal(goalId: string): Promise<number> { return this.change(d => {
+    requireValue(d.goals.some(g => g.id === goalId), '목표가 없습니다.'); const gone = new Set(d.steps.filter(s => s.goalId === goalId).map(s => s.id));
+    this.drop(d, gone, goalId); if (d.currentGoalId === goalId) { d.currentGoalId = undefined; d.currentStepId = undefined; } return gone.size;
+  }); }
 }
