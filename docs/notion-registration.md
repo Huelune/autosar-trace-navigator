@@ -1,4 +1,4 @@
-# Notion 등록 준비안
+# Notion 등록 기준과 결과
 
 이 문서는 `autosar-trace-navigator`의 프로젝트 문서와 개발 작업 이력을 개발 포트폴리오 Notion에
 중복 없이 등록한 기준과 검증 결과다. 2026-11-12 KST에 실제 데이터 소스 스키마와 기존 항목을 조회하고 등록했다.
@@ -11,7 +11,7 @@
 - [GitHub PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1)을 프로젝트 기준 문서와 Dev Log에 연결했다.
 - Project Areas 5개를 생성해 프로젝트와 연결했다.
 - 프로젝트 페이지에서 Project Areas 5개, Work Item 1개, Dev Log 1개의 역관계를 재조회해 확인했다.
-- 부분 검증·PR 검토 중 상태이므로 Portfolio 항목은 생성하지 않았다.
+- PR #1을 main에 병합하고 Dev Log를 `main 반영`으로 갱신했다. 부분 검증 상태이므로 Portfolio 항목은 생성하지 않았다.
 
 ## 등록 대상과 운영 구조
 
@@ -54,10 +54,10 @@
 | 시작일 | 2026-11-06 |
 | 최근 기준일 | 2026-11-12 |
 | 검증 상태 | 부분 검증 |
-| 현재 기준 | `main 076c155 / 원격 통합 브랜치 58811b4` |
+| 현재 기준 | `main 03c30531eb10210c65d0fd088a0510279f7851ea / PR #1 병합 / 대표 통합 커밋 58811b4` |
 | 보관 | 해제 |
 
-`현재 기준`은 원격 통합 브랜치와 main을 의도적으로 분리한다. 통합 브랜치 기능을 `main`의 현재 제공 기능으로 기록하지 않는다.
+`현재 기준`은 PR #1의 실제 merge commit을 사용한다. 기능 브랜치와 통합 브랜치는 구현 이력 근거로만 유지한다.
 Notion의 현재 기술 선택지에 Tkinter, tree-sitter, TypeScript가 없으므로 임의 옵션을 만들지 않고 본문에서 설명한다.
 
 ### 본문 초안
@@ -107,8 +107,8 @@ AUTOSAR Classic C 통합 테스트를 준비하는 개발자·테스터가 프�
 
 #### 현재 main 제공 기능
 
-`main@076c155`는 원본 VS Code 구현 명세와 저장소 기반 인계 정정을 포함한다. Python 분석 연결과 후속 VS Code UX,
-로컬 통합 결과는 아직 `main`에 병합되지 않았으므로 현재 제공 기능으로 기록하지 않는다.
+`main@03c3053`은 원본 VS Code 구현 명세, Python 분석 연결, 후속 VS Code 조사 UX, 교차 플랫폼 SQLite 복원과
+macOS Host 검증 경로 수정을 포함한다.
 
 #### 설정과 실행
 
@@ -119,7 +119,8 @@ VS Code 확장은 `release/branch-investigation-0.1.0.vsix`로 설치할 수 있
 
 - Python 표준 `unittest`, 가상 C 실행 시나리오, 확장 TypeScript 단위 테스트와 VS Code Host 시나리오를 구분한다.
 - SQLite 검증은 임시 DB를 사용하고 실제 사용자 DB를 수정하지 않는다.
-- 현재 로컬 통합 검증: 확장 단위 27개, Python 비-GUI 122개, 가상 C 시나리오 216개 통과, VSIX 무결성 확인.
+- 현재 검증: 확장 단위 27개, VS Code Host 7개 시나리오, Python 비-GUI 122개와 추가 20개,
+  가상 C 시나리오 216개 통과, VSIX 무결성 확인.
 - macOS Tk GUI 전체 실행, Zig 경로, 실제 VS Code 수동 UI는 이번 기준에서 미검증이다.
 
 #### 보안과 데이터 취급
@@ -130,16 +131,16 @@ VS Code 확장은 `release/branch-investigation-0.1.0.vsix`로 설치할 수 있
 #### 상태와 기준
 
 - 기본 브랜치: `main`
-- main 기준: `076c155`
-- 활성 원격 통합 브랜치: `origin/fix/feature-branch-integration` (대표 통합 커밋 `58811b4`)
-- Git 반영: 원격 브랜치에 push됐으며 PR·main 반영 전이다.
+- main 기준: `03c30531eb10210c65d0fd088a0510279f7851ea`
+- 구현 이력: `origin/fix/feature-branch-integration`, 대표 통합 커밋 `58811b4`
+- Git 반영: PR #1로 main 반영 완료.
 - 최근 검증일: 2026-11-11
 - 검증 상태: 부분 검증
 
 #### 알려진 제한과 다음 우선순위
 
 - macOS Tk와 Zig 호환성, 실제 VS Code 수동 UI, 다른 PC 설치 정책은 추가 확인이 필요하다.
-- 다음 우선순위는 통합 diff 검토 후 승인된 경우 PR 생성이다.
+- 다음 우선순위는 macOS Tk GUI 전체와 Zig 0.15.2 경로의 별도 환경 검증이다.
 - 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import, P2 그래프·성능 확대는 승인되지 않은 후보이며
   현재 제공 기능이나 확정 백로그로 기록하지 않는다.
 
@@ -177,14 +178,14 @@ Projects 페이지를 만든 뒤 아래 영역을 생성하고 모두 해당 프
 | 속성 | 값 |
 |---|---|
 | 작업명 | 기능 브랜치와 main 인계 통합 |
-| 한줄 요약 | 기능 브랜치의 Python·VS Code 변경을 main의 명세·인계와 로컬 통합하고 문서·VSIX·작업 기록을 정리했다. |
+| 한줄 요약 | 기능 브랜치의 Python·VS Code 변경을 main의 명세·인계와 통합하고 문서·VSIX·작업 기록을 정리했다. |
 | 작업 유형 | 운영 |
 | 검증 상태 | 부분 검증 |
 | 검증 방식 | 자동 테스트, 오프라인 실행, 문서 검토 |
-| 반영 상태 | 원격 브랜치 |
+| 반영 상태 | main 반영 |
 | 브랜치 | `fix/feature-branch-integration` |
 | 대표 커밋 | `58811b4b1953e20493ae355db70e6fcadec73381` |
-| PR | 비움 |
+| PR | `https://github.com/Huelune/autosar-trace-navigator/pull/1` |
 | 기술 | Python, Git, GitHub |
 | 작업 기간 | 2026-11-11 |
 | 완료일 | 2026-11-11 |
@@ -223,22 +224,21 @@ Projects 페이지를 만든 뒤 아래 영역을 생성하고 모두 해당 프
 
 - 브랜치: `fix/feature-branch-integration`
 - 대표 커밋: `58811b4b1953e20493ae355db70e6fcadec73381`
-- 반영 상태: 원격 브랜치
-- PR: 없음
+- 반영 상태: main 반영
+- PR: [#1](https://github.com/Huelune/autosar-trace-navigator/pull/1)
 
 #### 사용자 영향
 
-통합 브랜치에서 main의 명세·인계와 기능 브랜치의 분석·조사 UX를 함께 검토할 수 있고, 설치용 VSIX의 설명과 링크가
-현재 동작에 맞는다. 원격 main 사용자는 PR이 병합되기 전까지 영향을 받지 않는다.
+main에서 명세·인계와 기능 브랜치의 분석·조사 UX를 함께 사용할 수 있고, 설치용 VSIX의 설명과 링크가 현재 동작에 맞는다.
 
 #### 남은 과제
 
-통합 diff를 검토한 뒤 사용자가 요청하면 PR을 생성한다. macOS Tk·Zig와 실제 VS Code 수동 UI는
+PR #1은 merge commit `03c30531eb10210c65d0fd088a0510279f7851ea`로 main에 반영됐다. macOS Tk·Zig는
 별도 환경 검증이 필요하다.
 
 ## Portfolio 처리
 
-이번 작업은 `원격 브랜치`이고 `부분 검증`이므로 Portfolio 항목을 만들지 않는다. PR 병합과 요구 범위 검증이 끝난 뒤
+이번 작업은 `main 반영`이지만 `부분 검증`이므로 Portfolio 항목을 만들지 않는다. 요구 범위의 검증이 완료되어
 대표 성과로 볼 근거가 생겼을 때만 기존 항목을 조회하고 연결한다.
 
 ## 실제 등록 순서
@@ -255,11 +255,11 @@ Projects 페이지를 만든 뒤 아래 영역을 생성하고 모두 해당 프
 
 ## 등록 후 확인 체크리스트
 
-- [ ] 동일 프로젝트명 또는 저장소 URL의 중복 페이지가 없다.
-- [ ] `main`과 원격 통합 브랜치가 서로 다른 기준으로 적혔다.
-- [ ] Work Item과 Dev Log가 Projects 및 올바른 Project Areas에 연결됐다.
-- [ ] Dev Log의 반영 상태가 `원격 브랜치`, 검증 상태가 `부분 검증`이다.
-- [ ] PR 속성이 비어 있고 Portfolio 항목이 생성되지 않았다.
-- [ ] 고객·회사 자료, 자격 증명, 실제 서버·사용자 식별자가 포함되지 않았다.
-- [ ] 프로젝트 본문과 저장소 `STATUS.md`, TASK-005 세션의 수치가 일치한다.
-- [ ] 생성·수정된 Notion 페이지를 다시 읽어 저장 성공을 확인했다.
+- [x] 동일 프로젝트명 또는 저장소 URL의 중복 페이지가 없다.
+- [x] `main` 기준과 구현 브랜치 이력이 구분되어 적혔다.
+- [x] Work Item과 Dev Log가 Projects 및 올바른 Project Areas에 연결됐다.
+- [x] Dev Log의 반영 상태가 `main 반영`, 검증 상태가 `부분 검증`이다.
+- [x] PR #1이 연결됐고 Portfolio 항목이 생성되지 않았다.
+- [x] 고객·회사 자료, 자격 증명, 실제 서버·사용자 식별자가 포함되지 않았다.
+- [x] 프로젝트 본문과 저장소 `STATUS.md`, TASK-008 세션의 수치가 일치한다.
+- [x] 생성·수정된 Notion 페이지를 다시 읽어 저장 성공을 확인했다.

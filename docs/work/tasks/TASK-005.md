@@ -30,10 +30,9 @@
 
 통합과 검증을 완료했다. 2026-11-12 KST에 사용자 기본 push 정책에 따라
 `origin/fix/feature-branch-integration`으로 공유하고 [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1)을 생성했다.
-main 반영은 수행하지 않았다.
+PR #1은 merge commit `03c30531eb10210c65d0fd088a0510279f7851ea`로 main에 반영됐다.
 상세 환경·명령·제한은 최신 세션을 확인한다.
 
 ## 인수인계 — 다음 첫 행동
 
-PR #1의 통합 diff와 검증 결과를 검토한다.
-병합 전에는 macOS Tk·Zig 제한과 실제 UI 수동 확인이 미검증임을 유지한다.
+macOS Tk·Zig 제한과 실제 Tk UI 수동 확인을 미검증으로 유지하고 후속 환경 검증에서 보완한다.

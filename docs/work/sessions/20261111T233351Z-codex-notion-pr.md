@@ -5,7 +5,7 @@
 - 작업 카드: [tasks/TASK-008.md](../tasks/TASK-008.md)
 - 시작 브랜치: fix/feature-branch-integration
 - 시작 커밋: c31c706b0f521738794e318858d18aceb0c72237
-- 종료 상태: 완료 — Notion 등록·교차 플랫폼 검증·PR 생성 완료, main 미반영
+- 종료 상태: 완료 — Notion 등록·교차 플랫폼 검증·PR #1 병합·main 기록 갱신 완료
 
 ## 이번 범위
 
@@ -31,7 +31,7 @@
 | 확장 `npm test` | 단위 테스트 27개 통과 |
 | 확장 Host | record·restart·Restricted Mode 및 7개 Host 시나리오 통과 |
 | Python 비-GUI 묶음 | 122개 통과 |
-| 환경·값·구조체·튜토리얼 추가 검증 | 20개 중 발견한 2개 교차 플랫폼 오류 수정 후 관련 16개 재검증 통과 |
+| 환경·값·구조체·튜토리얼 추가 검증 | 발견한 2개 교차 플랫폼 오류 수정 후 20개 통과 |
 | C 실행 | 기본 12개·대형 192개·값 경로 6개·구조체 6개, 총 216 시나리오 통과 |
 | 작업 기록 | `test_worklog.py` 6개는 비-GUI 묶음에 포함해 통과 |
 
@@ -48,11 +48,12 @@
 - macOS Tk GUI 전체 자동 테스트와 사람이 직접 조작하는 Tk UI 확인은 완료하지 못했다.
 - Zig 0.15.2의 macOS C 컴파일 경로는 통과하지 못했으며 시스템 Clang 결과와 구분한다.
 - 실제 고객 코드, 다른 PC 설치 정책과 실서버는 검증하지 않았다.
-- PR 병합과 main 반영은 수행하지 않는다. 부분 검증이므로 Portfolio 항목도 생성하지 않는다.
+- 초기 범위에서는 PR 병합을 제외했으나 사용자의 후속 `전부 진행` 요청으로 PR #1을 main에 병합했다.
+- 부분 검증이므로 Portfolio 항목은 생성하지 않는다.
 
 ## 인수인계
 
 - PR: [#1 기능 브랜치와 main 인계 통합](https://github.com/Huelune/autosar-trace-navigator/pull/1)
-- Notion 프로젝트 기준 문서와 Dev Log의 PR URL, 원격 브랜치 상태를 재조회해 확인했다.
-- 다음 첫 행동: PR #1의 diff와 검증 결과를 검토하고 병합 여부를 결정한다.
-- 병합 후 Dev Log를 `main 반영`으로 바꾸고 프로젝트의 기준 커밋·현재 제공 기능·검증 상태를 갱신한다.
+- PR #1을 merge commit `03c30531eb10210c65d0fd088a0510279f7851ea`로 main에 반영했다.
+- Notion Dev Log를 `main 반영`으로 바꾸고 프로젝트 기준 커밋·현재 제공 기능을 갱신한 뒤 재조회했다.
+- 다음 첫 행동: 필요하면 macOS Tk GUI 전체 또는 Zig 0.15.2 경로를 별도 환경 작업으로 검증한다.
