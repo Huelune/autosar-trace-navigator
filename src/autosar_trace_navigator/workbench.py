@@ -136,6 +136,27 @@ def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = (
     return ProjectSnapshot(base, snapshots, results, resolve_rte(results, headers=headers), scope)
 
 
+def function_candidates(project: ProjectSnapshot,
+                        function: FunctionDefinition) -> tuple[InvestigationCandidate, ...]:
+    """Name-based call and RTE supplier candidates of one function; needs no trace session."""
+    candidates = []
+    for call in project.calls_by_owner.get(function.id, ()):
+        matches = project.functions_by_name.get(call.callee_name, ()) if call.kind == "direct_candidate" else ()
+        reasons = (*call.uncertainty, "name_only_call_candidate")
+        if not matches:
+            reasons += ("not_resolved_in_analysis_scope",)
+        if len(matches) > 1:
+            reasons += ("multiple_function_candidates",)
+        for match in matches or [None]:
+            candidates.append(InvestigationCandidate(
+                match, call.callee_expression, "call", call.location, reasons))
+    for write, dependency in project.rte_by_owner.get(function.id, ()):
+        candidates.append(InvestigationCandidate(
+            project.functions_by_id.get(write.function_id), dependency.channel, "rte_data",
+            write.location, dependency.uncertainty))
+    return tuple(candidates)
+
+
 class Workbench:
     """Keep save metadata unchanged on failure; candidate selection never resolves symbols."""
 
@@ -173,22 +194,7 @@ class Workbench:
         current = self.manager.current_step.function
         if self.project.functions_by_id.get(current.id) != current:
             return ()
-        candidates = []
-        for call in self.project.calls_by_owner.get(current.id, ()):
-            matches = self.project.functions_by_name.get(call.callee_name, ()) if call.kind == "direct_candidate" else ()
-            reasons = (*call.uncertainty, "name_only_call_candidate")
-            if not matches:
-                reasons += ("not_resolved_in_analysis_scope",)
-            if len(matches) > 1:
-                reasons += ("multiple_function_candidates",)
-            for function in matches or [None]:
-                candidates.append(InvestigationCandidate(
-                    function, call.callee_expression, "call", call.location, reasons))
-        for write, dependency in self.project.rte_by_owner.get(current.id, ()):
-            candidates.append(InvestigationCandidate(
-                self.project.functions_by_id.get(write.function_id), dependency.channel, "rte_data",
-                write.location, dependency.uncertainty))
-        return tuple(candidates)
+        return function_candidates(self.project, current)
 
     def follow(self, candidate: InvestigationCandidate, reason: str) -> None:
         if (self.manager is None or candidate.function is None

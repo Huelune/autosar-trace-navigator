@@ -2,6 +2,13 @@
 
 ## Unreleased
 
+### VS Code 확장용 Python 분석 진입점 (TASK-002)
+- stdin JSON 요청 1건에 stdout JSON 응답 1건을 내는 `autosar_trace_navigator.bridge` 추가. Tkinter·SQLite·네트워크를 쓰지 않음.
+- 지정한 줄이 속한 함수의 호출 후보와 RTE Writer 후보를 불확실성과 함께 반환. 줄은 0부터, 열은 UTF-16 단위.
+- UTF-8로 해석할 수 없는 줄은 열과 원문을 비워 편집기가 추정 위치로 이동하지 않게 함.
+- 실패는 오류 코드만 반환하고 예외 원문·경로를 출력하지 않음. 파일 수 한도를 넘으면 부분 결과 없이 거부.
+- `Workbench.candidates()`의 후보 조립을 세션 없이 호출할 수 있는 `function_candidates()`로 분리. 기존 동작은 동일.
+
 ### GUI 테스트의 Tk 객체 정리 시점 고정
 - GUI 테스트가 끝날 때 주 스레드에서 가비지 수집을 실행해 Tk 변수가 뒤 테스트의 작업 스레드에서 정리되지 않게 함.
 - 테스트 파일이 늘어 수집 시점이 바뀌면 전체 실행이 `Tcl_AsyncDelete`로 중단되던 잠재 문제를 수정.
