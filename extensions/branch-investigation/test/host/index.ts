@@ -27,8 +27,8 @@ export async function run():Promise<void>{
     app.setPromptsForTests({input:async()=>{if(!switched){switched=true;await select('producer.c','Rte_Write_Struct_State(&built)');}return answers.shift();},snippet:async()=>undefined});
     await command('addSelection');let d=service.document;assert.equal(d.steps.length,1);const first=d.steps[0],anchor=d.anchors.find(a=>a.id===first.codeAnchorId)!;
     assert.equal(first.snippet,original.snippet);assert.equal(anchor.documentVersion,original.doc.version);assert.equal(vscode.Uri.parse(anchor.fileUri!).fsPath.toLowerCase(),vscode.Uri.file(path.join(root,'unicode.c')).fsPath.toLowerCase());assert.equal(anchor.range!.start.character,2);assert.equal(anchor.range!.end.character,16);assert.equal(resolutionState(),'verified');assert.equal(app.details.isOpen,false,'adding a step must not open the detail panel');assert.equal(first.goalSnapshot.target.kind,'manual');
-    // Only a click on the step in the tree opens the panel; afterwards other actions refresh it in place.
-    await command('openStep',first.id);assert.equal(app.details.isOpen,true);app.details.dispose();assert.equal(app.details.isOpen,false);
+    // A click on a step only goes to its code. The detail panel opens from its own command and nowhere else.
+    await command('openStep',first.id);assert.equal(app.details.isOpen,false);await command('editStep',first.id);assert.equal(app.details.isOpen,true);app.details.dispose();assert.equal(app.details.isOpen,false);
     const rootItems=app.tree!.getChildren();assert.equal(rootItems.length,1);assert.equal(app.tree!.getChildren(rootItems[0]).length,1);assert.ok(app.tree!.getTreeItem({kind:'step',id:first.id}).command);
     console.log('PASS Host: selection / prompt editor switch / Unicode CRLF / tree / source navigation');
     const before=service.document.revision;app.setPromptsForTests({input:async()=>'',snippet:async()=>undefined});await command('addSelection');assert.equal(service.document.revision,before);

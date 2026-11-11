@@ -55,7 +55,7 @@ export class InvestigationController {
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
     const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
   }
-  /** panel=true only for an explicit click on a step in the tree; every other path leaves a closed detail panel closed. */
+  /** panel=true only for the explicit 자세히 보기 command; every other path, including a click on a step, leaves a closed detail panel closed. */
   private async display(stepId:string,openSource:boolean,record=false,panel=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
     this.details.show(step,anchor,'위치 확인 중…',d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
     const resolved=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());this.lastResolution=resolved;
@@ -116,7 +116,7 @@ export class InvestigationController {
     command('createGoal',async(_arg,snapshot)=>{const service=this.ready(),capture=snapshot?await this.capture(snapshot):manual();const input=await this.goalInput();if(input){await service.createGoal(input,capture);}},true);
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());
-    command('openStep',async arg=>this.display(this.stepId(arg),true,true,true));
+    command('openStep',async arg=>this.display(this.stepId(arg),true,true));
     command('editStep',async arg=>this.display(this.stepId(arg),false,false,true));
     command('switchGoal',async arg=>{const service=this.ready();let target=typeof arg==='string'?arg:undefined;if(!target){target=(await vscode.window.showQuickPick(service.document.goals.map(g=>({label:g.title,id:g.id})),{title:'조사 목표 전환'}))?.id;}if(target){await service.switchGoal(target);}});
     command('setStatus',async arg=>{const stepId=this.stepId(arg),choice=await vscode.window.showQuickPick(Object.entries(statusLabels).map(([status,label])=>({label,status:status as Status})),{title:'조사 상태 — 확인은 CT 실측 확인과 다릅니다.'});if(choice){await this.ready().status(stepId,choice.status);await this.display(stepId,false);}});

@@ -18,7 +18,7 @@ export class InvestigationTree implements vscode.TreeDataProvider<TreeEntry>, vs
     item.id=s.id; item.contextValue='step'; item.description=`${d.currentStepId===s.id?'▶ ':''}${statusLabels[s.status]}`;
     item.tooltip=`${s.reason}\n${statusLabels[s.status]} · 조사 순번이며 실제 실행 순서가 아닙니다.`;
     item.iconPath=new vscode.ThemeIcon(s.status==='deferred'?'clock':s.status==='excluded'?'circle-slash':s.status==='confirmed'?'check':'search');
-    item.command={command:'branchInvestigation.openStep',title:'이유와 소스 보기',arguments:[s.id]}; return item;
+    item.command={command:'branchInvestigation.openStep',title:'코드로 이동',arguments:[s.id]}; return item;
   }
   dispose(): void { this.event.dispose(); }
 }

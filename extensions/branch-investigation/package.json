@@ -73,14 +73,14 @@
       },
       {
         "command": "branchInvestigation.openStep",
-        "title": "조사단계 열기",
+        "title": "조사단계의 코드로 이동",
         "category": "분기 조사"
       },
       {
         "command": "branchInvestigation.editStep",
-        "title": "조사 정보 수정",
+        "title": "자세히 보기 (이유·조건·근거)",
         "category": "분기 조사",
-        "icon": "$(edit)"
+        "icon": "$(open-preview)"
       },
       {
         "command": "branchInvestigation.setStatus",
@@ -214,6 +214,11 @@
           "command": "branchInvestigation.editStep",
           "when": "view == branchInvestigation.tree && viewItem == step",
           "group": "inline@1"
+        },
+        {
+          "command": "branchInvestigation.editStep",
+          "when": "view == branchInvestigation.tree && viewItem == step",
+          "group": "1_open"
         },
         {
           "command": "branchInvestigation.setStatus",
