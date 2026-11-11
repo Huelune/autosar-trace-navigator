@@ -66,7 +66,8 @@ Host 위치가 기본 Windows 설치 경로와 다르면 PowerShell에서
 `$env:VSCODE_EXECUTABLE_PATH = '승인된 VS Code 실행 파일의 전체 경로'`를 지정한다.
 macOS/Linux에서는 같은 환경 변수를 해당 셸 방식으로 설정한다. 다른 OS의 Host는 아직 검증하지 않았다.
 F5는 **확장 폴더 자체**를 VS Code로 열어 실행한다. [확장 사용법](extensions/branch-investigation/README.md).
-P0 실행에는 Python이 필요하지 않다. Python 엔진 연동은 후속 작업 카드의 범위다.
+수동 기록에는 Python이 필요하지 않다. 관련 후보 조회는 엔진이 설치된 Python 경로를 사용자 설정에 넣어야 동작하며,
+`npm run test:host`는 저장소 루트에 `.venv`가 있으면 그 Python으로 엔진 연동 시나리오까지 실행하고 없으면 SKIP으로 표시한다.
 
 ### 인터넷 없는 PC
 

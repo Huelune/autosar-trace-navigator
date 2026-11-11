@@ -1,6 +1,7 @@
 """Manual investigation history, independent of parsing, storage and GUI."""
 
 from dataclasses import dataclass, replace
+from pathlib import PurePosixPath, PureWindowsPath
 from typing import Literal
 from uuid import uuid4
 
@@ -48,7 +49,9 @@ def _require_text(value: str) -> None:
 
 
 def _validate_range(span: SourceRange) -> None:
-    if not span.path.is_absolute():
+    raw_path = str(span.path)
+    if not (span.path.is_absolute() or PureWindowsPath(raw_path).is_absolute()
+            or PurePosixPath(raw_path).is_absolute()):
         raise ValueError("Source paths must be absolute")
     positions = (span.start_line, span.start_column, span.end_line, span.end_column)
     if any(type(value) is not int or value < 1 for value in positions):

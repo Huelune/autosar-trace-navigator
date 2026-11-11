@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { CapturedCode, clone, emptyDocument, id, WorkspaceDocument } from '../../src/domain/model';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { validate } from '../../src/domain/validation';
+import { forks, shownChildren, shownParent, startsBranch } from '../../src/ui/treeLayout';
 const capture=(file='file:///C:/fictional/a.c'):CapturedCode=>({snippet:'if (pedal >= 60u)',fileUri:file,relativePath:'a.c',range:{start:{line:2,character:0},end:{line:2,character:18}},contextBefore:'',contextAfter:''});
 const setup=()=>new InvestigationService(emptyDocument(),{async save(d){const n=clone(d);n.revision++;return n;}});
 async function initial(){const s=setup();const root=await s.add(capture(),'목표 입력 확인',{title:'정상 경로',description:'수동 분기 앵커'});return {s,root};}
@@ -14,3 +15,35 @@ test('visits back/forward preserve Steps/Edges, parent differs from previous vis
 test('repair creates a new anchor without replacing stored snippet or goal snapshot',async()=>{const {s,root}=await initial();const before=s.document.steps[0];await s.repair(root,{...capture(),snippet:'new code',range:{start:{line:5,character:0},end:{line:5,character:8}}});const after=s.document.steps[0];assert.notEqual(after.codeAnchorId,before.codeAnchorId);assert.equal(after.snippet,before.snippet);assert.deepEqual(after.goalSnapshot,before.goalSnapshot);});
 test('queued changes are serialized; failure retains validated dirty draft and can retry',async()=>{let fail=true;const s=new InvestigationService(emptyDocument(),{async save(d){await new Promise(r=>setTimeout(r,2));if(fail){throw Error('disk full');}const n=clone(d);n.revision++;return n;}});await assert.rejects(s.add(capture(),'작성',{title:'목표',description:''}));assert.equal(s.dirty,true);assert.equal(s.document.steps.length,1);await assert.rejects(s.add(capture(),'후속 변경 금지'));fail=false;await s.retrySave();await Promise.all([s.add(capture(),'자식1'),s.add(capture(),'자식2')]);assert.deepEqual(s.document.steps.map(x=>x.sequence),[1,2,3]);assert.equal(s.document.revision,3);assert.equal(s.dirty,false);});
 test('invalid edit/oversized data leaves the last document intact',async()=>{const {s,root}=await initial();const before=s.document;await assert.rejects(s.edit(root,{...before.steps[0],reason:''}));await assert.rejects(s.add({...capture(),snippet:'x'.repeat(262145)},'과대'));assert.deepEqual(s.document,before);const d=s.document;d.schemaVersion=2 as 1;assert.throws(()=>validate(d));});
+test('deleting a step removes its subtree, evidence, relations and visits but nothing else; the document stays valid',async()=>{
+  const {s,root}=await initial();const first=await s.add(capture(),'첫 경로');const below=await s.add(capture('file:///C:/fictional/b.c'),'첫 경로의 하위');await s.evidence(below,{kind:'hypothesis',text:'지워질 근거'});
+  await s.select(root);const sibling=await s.add(capture('file:///C:/fictional/c.c'),'대체 경로');await s.select(below);
+  assert.equal(await s.removeStep(first),2);const d=s.document;validate(d);
+  assert.deepEqual(d.steps.map(x=>x.id),[root,sibling]);assert.equal(d.currentStepId,root);assert.equal(d.evidence.length,0);
+  assert.ok(d.relations.every(r=>r.toStepId===sibling));assert.ok(d.visits.every(v=>v.stepId===root||v.stepId===sibling));assert.equal(d.visits[d.visitCursor].stepId,sibling);
+  assert.ok(!d.anchors.some(a=>a.fileUri?.endsWith('b.c')));assert.ok(d.anchors.some(a=>a.fileUri?.endsWith('c.c')));assert.equal(d.codeNodes.length,new Set(d.anchors.map(a=>a.codeNodeId)).size);
+  await assert.rejects(s.removeStep(first));assert.equal(await s.removeStep(root),2);assert.equal(s.document.steps.length,0);assert.equal(s.document.goals.length,1);assert.equal(s.document.currentStepId,undefined);assert.equal(s.document.visitCursor,-1);
+});
+test('deleting a goal removes its steps only and leaves no goal current',async()=>{
+  const {s,root}=await initial();await s.add(capture(),'자식');const kept=s.document.goals[0].id;await s.createGoal({title:'지울 목표',description:''},capture('file:///C:/fictional/d.c'));const doomed=s.document.currentGoalId!;await s.add(capture('file:///C:/fictional/d.c'),'지울 단계');
+  assert.equal(await s.removeGoal(doomed),1);const d=s.document;validate(d);
+  assert.deepEqual(d.goals.map(g=>g.id),[kept]);assert.equal(d.steps.length,2);assert.equal(d.steps[0].id,root);assert.equal(d.currentGoalId,undefined);assert.equal(d.currentStepId,undefined);
+  assert.ok(!d.anchors.some(a=>a.fileUri?.endsWith('d.c')));assert.ok(d.navigationEvents.every(e=>e.goalId===kept));await assert.rejects(s.removeGoal(doomed));
+});
+test('tree layout keeps a single path on one level and indents only where the investigation forks',()=>{
+  const step=(n:number,parent?:number)=>({id:'s'+n,goalId:'g',parentStepId:parent===undefined?undefined:'s'+parent,sequence:n});
+  // 1 -> 2 -> 3, then 3 forks into 4 -> 5 and 6 -> 7; 7 forks again into 8 and 9.
+  const steps=[step(1),step(2,1),step(3,2),step(4,3),step(5,4),step(6,3),step(7,6),step(8,7),step(9,7)];
+  const ids=(parent:{kind:'goal'|'step';id:string})=>shownChildren(steps,parent).map(s=>s.id);
+  assert.deepEqual(ids({kind:'goal',id:'g'}),['s1','s2','s3']);assert.deepEqual(ids({kind:'step',id:'s1'}),[]);assert.deepEqual(ids({kind:'step',id:'s2'}),[]);
+  assert.deepEqual(ids({kind:'step',id:'s3'}),['s4','s5','s6','s7']);assert.deepEqual(ids({kind:'step',id:'s7'}),['s8','s9']);assert.deepEqual(ids({kind:'step',id:'s5'}),[]);
+  assert.deepEqual(steps.filter(s=>forks(steps,s.id)).map(s=>s.id),['s3','s7']);assert.deepEqual(steps.filter(s=>startsBranch(steps,s)).map(s=>s.id),['s4','s6','s8','s9']);
+  // Every step appears exactly once, and the parent used for reveal agrees with where it is listed.
+  const seen:string[]=[];const walk=(parent:{kind:'goal'|'step';id:string})=>{for(const s of shownChildren(steps,parent)){seen.push(s.id);assert.deepEqual(shownParent(steps,s),parent);walk({kind:'step',id:s.id});}};walk({kind:'goal',id:'g'});
+  assert.deepEqual(seen.sort(),steps.map(s=>s.id).sort());
+  // Depth is the number of forks above a step, not the number of steps: nine steps, two levels below the goal.
+  const depth=(s:{id:string;goalId:string;parentStepId?:string;sequence:number})=>{let n=0;for(let p=shownParent(steps,s);p.kind==='step';p=shownParent(steps,steps.find(x=>x.id===p.id)!)){n++;}return n;};
+  assert.deepEqual(steps.map(depth),[0,0,0,1,1,1,1,2,2]);
+  // Two first steps under one goal are both listed at the goal level.
+  assert.deepEqual(shownChildren([step(1),step(2,1),step(3)],{kind:'goal',id:'g'}).map(s=>s.id),['s1','s2','s3']);
+});

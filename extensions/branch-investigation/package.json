@@ -66,15 +66,21 @@
         "icon": "$(note)"
       },
       {
+        "command": "branchInvestigation.traceRelated",
+        "title": "관련 후보 조회 (값·조건·호출·RTE)",
+        "category": "분기 조사",
+        "icon": "$(references)"
+      },
+      {
         "command": "branchInvestigation.openStep",
-        "title": "조사단계 열기",
+        "title": "조사단계의 코드로 이동",
         "category": "분기 조사"
       },
       {
         "command": "branchInvestigation.editStep",
-        "title": "조사 정보 수정",
+        "title": "자세히 보기 (이유·조건·근거)",
         "category": "분기 조사",
-        "icon": "$(edit)"
+        "icon": "$(open-preview)"
       },
       {
         "command": "branchInvestigation.setStatus",
@@ -103,6 +109,18 @@
         "command": "branchInvestigation.repairAnchor",
         "title": "선택 범위로 위치 재연결",
         "category": "분기 조사"
+      },
+      {
+        "command": "branchInvestigation.deleteStep",
+        "title": "단계 삭제 (하위 포함)",
+        "category": "분기 조사",
+        "icon": "$(trash)"
+      },
+      {
+        "command": "branchInvestigation.deleteGoal",
+        "title": "목표 삭제 (단계 포함)",
+        "category": "분기 조사",
+        "icon": "$(trash)"
       },
       {
         "command": "branchInvestigation.retrySave",
@@ -157,6 +175,11 @@
           "command": "branchInvestigation.addSelection",
           "when": "isWorkspaceTrusted && editorHasSelection && (editorLangId == c || editorLangId == cpp)",
           "group": "navigation@90"
+        },
+        {
+          "command": "branchInvestigation.traceRelated",
+          "when": "isWorkspaceTrusted && (editorLangId == c || editorLangId == cpp)",
+          "group": "navigation@91"
         }
       ],
       "view/title": [
@@ -193,14 +216,59 @@
           "group": "inline@1"
         },
         {
+          "command": "branchInvestigation.editStep",
+          "when": "view == branchInvestigation.tree && viewItem == step",
+          "group": "1_open"
+        },
+        {
           "command": "branchInvestigation.setStatus",
           "when": "view == branchInvestigation.tree && viewItem == step"
         },
         {
           "command": "branchInvestigation.repairAnchor",
           "when": "view == branchInvestigation.tree && viewItem == step"
+        },
+        {
+          "command": "branchInvestigation.deleteStep",
+          "when": "view == branchInvestigation.tree && viewItem == step",
+          "group": "z_delete"
+        },
+        {
+          "command": "branchInvestigation.deleteGoal",
+          "when": "view == branchInvestigation.tree && viewItem == goal",
+          "group": "z_delete"
+        }
+      ],
+      "commandPalette": [
+        {
+          "command": "branchInvestigation.deleteStep",
+          "when": "false"
+        },
+        {
+          "command": "branchInvestigation.deleteGoal",
+          "when": "false"
         }
       ]
+    },
+    "configuration": {
+      "title": "Branch Investigation",
+      "properties": {
+        "branchInvestigation.pythonPath": {
+          "type": "string",
+          "default": "",
+          "scope": "machine",
+          "markdownDescription": "분석 엔진(`autosar_trace_navigator`)이 설치된 Python 실행 파일의 전체 경로. 비워 두면 Python을 실행하지 않고 수동 기록만 사용합니다. 사용자 설정에서만 지정할 수 있습니다."
+        },
+        "branchInvestigation.analysisPaths": {
+          "type": "array",
+          "items": {
+            "type": "string"
+          },
+          "default": [],
+          "scope": "window",
+          "markdownDescription": "관련 후보 조회 때 분석할 작업 폴더 기준 파일·폴더. 폴더 전체는 `.` 입니다. 파일 500개·32 MiB를 넘으면 조회를 거부합니다."
+        }
+      }
     }
   },
   "devDependencies": {

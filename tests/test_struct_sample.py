@@ -6,6 +6,7 @@ import json
 import sqlite3
 from pathlib import Path
 import tempfile
+import gc
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -102,6 +103,8 @@ class StructGuiTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
     def test_member_selector_follow_preview_and_original_goal_are_connected(self):
         self.assertEqual(self.app.variable_entry["values"], ("p->a",))

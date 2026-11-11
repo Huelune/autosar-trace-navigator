@@ -6,6 +6,7 @@ import tempfile
 import subprocess
 import sys
 import time
+import gc
 import tkinter as tk
 import unittest
 from unittest.mock import patch
@@ -30,6 +31,8 @@ class GuiTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects on this thread, not in a later worker thread's GC
 
     def test_goal_reason_source_readonly_and_distinct_candidate_tables(self):
         self.assertIn("mode == BRAKE_ASSIST", self.app.goal.get())

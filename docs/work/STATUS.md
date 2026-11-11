@@ -9,7 +9,15 @@
 처음 공유할 때 미추적 파일이라는 이유로 제외한 것은 인계에 필요한 명세를 누락한 판단 오류였다.
 [TASK-003](tasks/TASK-003.md)에서 원문을 그대로 포함하고 [구현을 이어받는 순서](../branch-investigation/README.md)를 추가했다.
 
-## 구현된 것
+## Git 반영 경계
+
+- 원격 `main`의 현재 기준은 `076c155`이며 원본 구현 지시서와 인계 정정까지 포함한다.
+- Python 분석 연결과 후속 VS Code UX는 원격 `feat/repo-analysis-aa2e6b`에 있으며 아직 `main`에 병합되지 않았다.
+- [TASK-005](tasks/TASK-005.md)는 두 브랜치를 로컬 통합 브랜치에서 합치고 문서·배포물을 정리한 작업이다.
+  통합 브랜치는 [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1)로 검토 중이며 main 반영 전까지 아래 확장 기능을
+  원격 `main`의 현재 제공 기능으로 해석하지 않는다.
+
+## 통합 브랜치에 구현된 것
 
 | 영역 | 현재 구현 | 확인할 곳 |
 |---|---|---|
@@ -19,7 +27,9 @@
 | VS Code P0 | 코드 선택·목표/이유·트리·상세·소스 재방문·스니펫·근거·원자 JSON/복구·VSIX | [확장 README](../../extensions/branch-investigation/README.md), [P0 결과](../branch-investigation/P0_구현_검증결과.md) |
 | 작업 공유 | 공통 AGENTS/CLAUDE 지침, 새 PC 환경 안내, 작업 카드·세션·생성기 | [시작 안내](../../CONTRIBUTING.md), [기록 절차](README.md) |
 
-VS Code P0는 Python을 실행하지 않는다. 기존 엔진 연동은 미구현이며 `traceAnalysisPort.ts`의 기본 비활성 경계만 있다.
+VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python 경로를 설정하면 커서 변수의 값 출처, 커서 위치의 실행 조건,
+커서 함수의 호출·RTE Writer 후보를 기존 엔진에서 조회해 고른 후보를 단계로 추가할 수 있다(TASK-002, TASK-004).
+함수 검색과 결과 캐시는 미연결이다.
 호출과 RTE 관계는 별개이며, 후보/조사 경로를 실제 wiring·프로그램 실행 순서·CT 값 제어 성공으로 해석하지 않는다.
 
 ## 검증 근거
@@ -40,12 +50,20 @@ VS Code P0는 Python을 실행하지 않는다. 기존 엔진 연동은 미구�
 | 카드 | 범위 | 최초 등록 상태 |
 |---|---|---|
 | [TASK-001](tasks/TASK-001.md) | 저장소 기반 환경 구성·공통 지침·작업/세션 기록 | 완료 (세부 인계는 카드) |
-| [TASK-002](tasks/TASK-002.md) | P1 Python 분석 포트 연결 | 계획, 범위 확정 후 착수 |
+| [TASK-002](tasks/TASK-002.md) | P1 Python 분석 포트 연결 | 완료, 원격 기능 브랜치 (main 미반영) |
 | [TASK-003](tasks/TASK-003.md) | 원본 구현 지시서 누락 공유 복구 | 완료 (검증·공유는 연결 세션) |
+| [TASK-004](tasks/TASK-004.md) | 확장의 값 출처·실행 조건 후보 연결 | 완료, 원격 기능 브랜치 (main 미반영) |
+| [TASK-005](tasks/TASK-005.md) | 기능 브랜치와 main 인계 통합 | 완료, [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1) 검토 중 |
+| [TASK-006](tasks/TASK-006.md) | Notion 프로젝트·작업 이력 등록 준비 | 완료, 원격 브랜치 (Notion 외부 변경 없음) |
+| [TASK-007](tasks/TASK-007.md) | 검증된 작업 브랜치 자동 push 정책 | 완료, 원격 브랜치 |
+| [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 완료, [PR #1](https://github.com/Huelune/autosar-trace-navigator/pull/1) 검토 중 |
 
 P1의 다른 후보는 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import다.
 이들은 지금 구현하도록 승인된 범위가 아니다. 요청받은 항목만 별도 카드로 나누고 완료 조건부터 정한다.
 P2 그래프·성능 확대와 CT 자동 조작은 현재 작업에 포함하지 않는다.
+
+Notion 기록을 실행할 때는 [등록 준비안](../notion-registration.md)에 따라 현재 공용 데이터 소스 스키마와 중복을 다시 확인한다.
+TASK-005는 Projects·Project Areas·Work Items·Dev Logs에 등록했다. 원격 브랜치·부분 검증 상태이므로 Portfolio는 생성하지 않았다.
 
 다른 PC의 첫 행동은 [CONTRIBUTING](../../CONTRIBUTING.md)에 따라 환경과 대상 커밋을 확인하고,
 담당 카드로 **새 세션**을 시작하는 것이다. 과거 세션을 자신의 수행 기록으로 덮어쓰지 않는다.
