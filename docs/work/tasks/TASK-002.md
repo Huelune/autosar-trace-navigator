@@ -1,6 +1,6 @@
 # TASK-002 — P1 Python 분석 엔진 연결 범위 확정과 구현
 
-- 상태: review
+- 상태: done
 - 담당: dev-b / Claude Code
 - 브랜치: feat/repo-analysis-aa2e6b
 - 기준 커밋: 7057a38aca5631266d09cb15f510e356a25d29c6
@@ -25,15 +25,14 @@ Tkinter 삽입, 원본 C/H 변경, 실제 RTE wiring/실행 순서 확정, CT �
 - [x] 기존 analyze_project/ProjectSnapshot/Workbench API 재사용 위치 확인
 - [x] 파일/인코딩·UTF-8 바이트 ↔ UTF-16 범위 변환 실패를 "위치 확인 필요"로 보존
 - [x] 범위 제한·취소/실패·불확실 후보·원본 무변경을 가상 코드로 검증 (Python 7개, 확장 단위 5개)
-- [ ] 기존 P0 기록과 독립 동작·관련 Python/확장 회귀 검증 — Python 184개·확장 단위 23개 통과, **Host 테스트 미실행**
+- [x] 기존 P0 기록과 독립 동작·관련 Python/확장 회귀 검증 — Python 184개·확장 단위 23개·Host 6단계(엔진 연동 포함) 통과
 - [x] 세션에 실제 검증·미검증·다음 행동 기록
 
 ## 진행과 검증
 
-1차 범위 구현과 커밋 완료(로컬). 실행 명령·결과·환경과 미검증 항목은 최신 세션에 있다.
+1차 범위 구현·커밋(로컬)·Host 검증 완료. 실행 명령·결과·환경과 남은 미검증 항목은 최신 세션에 있다.
 
 ## 인수인계 — 다음 첫 행동
 
-VS Code 업데이트가 끝난 PC에서 `extensions/branch-investigation`의 `npm run test:host`를 실행한다.
-엔진 연동 시나리오까지 통과하면 남은 완료 조건을 체크하고 done으로 바꾼다.
-사내 PC에서 Python subprocess 사용이 허용되는지도 해당 환경에서 확인한다.
+1차 범위는 끝났다. 값 출처·실행 조건 후보 연결 등 다음 범위는 승인받은 뒤 새 카드로 나눈다.
+사내 PC에서 Python subprocess 사용이 허용되는지는 해당 환경에서 확인한다. 실제 편집기에서 사람이 직접 조작한 확인도 남아 있다.
