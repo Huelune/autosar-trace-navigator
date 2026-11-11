@@ -121,6 +121,21 @@ class BridgeTests(unittest.TestCase):
             unknown = ask("a.c", 3, root=root, includes=[], character=20)
             self.assertEqual((unknown["variable"], unknown["notes"]), (None, ["cursor_position_not_resolved"]))
 
+    def test_no_reason_in_any_form_carries_the_absolute_root(self):
+        root = ROOT / "test" / "struct_paths"
+        lines = (root / "consumer.c").read_text(encoding="utf-8").splitlines()
+        line = next(i for i, text in enumerate(lines) if "a = b.a" in text)
+        result = ask("consumer.c", line, root=root, includes=["."], character=lines[line].index("b.a"))
+        self.assertEqual(result["variable"], "b.a")
+        reasons = [reason for c in result["candidates"] for reason in c["uncertainty"]]
+        self.assertIn("member_type_layout_not_verified", reasons)
+        self.assertNotIn(root.resolve().as_posix().casefold(), json.dumps(result).replace("\\\\", "/").casefold())
+        project = bridge.analyze_project(root)
+        hidden = bridge._notes(project, (f"declaration: {root.parent / 'secret.c'}:3", f"seen in {project.root}",
+                                         f"initializer_declaration: {project.root / 'producer.c'}:7", "plain_reason"))
+        self.assertEqual(hidden, ["declaration: outside_analysis_root:3", "path_detail_withheld",
+                                  "initializer_declaration: producer.c:7", "plain_reason"])
+
     def test_failures_are_codes_without_paths_or_messages(self):
         for request, code in (
                 ([], "invalid_request"),

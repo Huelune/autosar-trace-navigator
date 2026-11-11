@@ -6,6 +6,7 @@ codes only: exception text may hold paths or source values and is never written.
 
 from pathlib import Path
 import json
+import re
 import sys
 
 from .models import FunctionDefinition, SourceRange, ValueProbe
@@ -69,15 +70,23 @@ def _cursor(data: bytes, path: Path, line: int, character: int) -> SourceRange |
 
 
 def _notes(project: ProjectSnapshot, reasons: tuple[str, ...]) -> list[str]:
-    """Engine reasons for the editor; an absolute declaration path becomes workspace-relative."""
+    """Engine reasons for the editor, never with an absolute path.
+
+    Reasons such as ``declaration: <path>:<line>`` are rewritten relative to the
+    analysis root. Any other reason that still names the root is withheld whole.
+    """
+    roots = {str(project.root).casefold(), project.root.as_posix().casefold()}
     result = []
     for reason in reasons:
-        if reason.startswith("declaration: "):
-            where, _, line = reason[len("declaration: "):].rpartition(":")
+        match = re.fullmatch(r"(\w*declaration): (.*):(\d+)", reason)
+        if match:
             try:
-                reason = f"declaration: {Path(where).relative_to(project.root).as_posix()}:{line}"
+                where = Path(match[2]).relative_to(project.root).as_posix()
             except ValueError:
-                reason = "declaration: outside_analysis_root"
+                where = "outside_analysis_root"
+            reason = f"{match[1]}: {where}:{match[3]}"
+        if any(root in reason.casefold() for root in roots):
+            reason = "path_detail_withheld"
         result.append(reason[:MAX_NOTE_CHARS])
     return result
 
