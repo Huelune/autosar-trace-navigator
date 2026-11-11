@@ -55,13 +55,14 @@ export class InvestigationController {
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
     const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
   }
-  private async display(stepId:string,openSource:boolean,record=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
-    this.details.show(step,anchor,'위치 확인 중…',d.evidence.filter(e=>e.stepId===step.id),service.dirty);
+  /** panel=true only for an explicit click on a step in the tree; every other path leaves a closed detail panel closed. */
+  private async display(stepId:string,openSource:boolean,record=false,panel=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
+    this.details.show(step,anchor,'위치 확인 중…',d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
     const resolved=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());this.lastResolution=resolved;
-    this.details.show(step,anchor,resolved.state==='verified'?'저장 범위의 현재 텍스트 일치 (실행 검증 아님)':resolved.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty);
+    this.details.show(step,anchor,resolved.state==='verified'?'저장 범위의 현재 텍스트 일치 (실행 검증 아님)':resolved.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
     if(openSource&&resolved.state==='verified'){
       // Recheck the live buffer immediately before selecting; an unsaved edit must not be ignored.
-      const checked=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());if(checked.state!=='verified'){this.lastResolution=checked;this.details.show(step,anchor,checked.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty);return;}
+      const checked=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());if(checked.state!=='verified'){this.lastResolution=checked;this.details.show(step,anchor,checked.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);return;}
       const r=new vscode.Range(checked.range.start.line,checked.range.start.character,checked.range.end.line,checked.range.end.character);
       const editor=await vscode.window.showTextDocument(vscode.Uri.parse(checked.fileUri),{viewColumn:vscode.ViewColumn.One,selection:r,preserveFocus:false});editor.setDecorations(this.decoration,[r]);editor.revealRange(r,vscode.TextEditorRevealType.InCenterIfOutsideViewport);
     }
@@ -115,8 +116,8 @@ export class InvestigationController {
     command('createGoal',async(_arg,snapshot)=>{const service=this.ready(),capture=snapshot?await this.capture(snapshot):manual();const input=await this.goalInput();if(input){await service.createGoal(input,capture);}},true);
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());
-    command('openStep',async arg=>this.display(this.stepId(arg),true,true));
-    command('editStep',async arg=>this.display(this.stepId(arg),false));
+    command('openStep',async arg=>this.display(this.stepId(arg),true,true,true));
+    command('editStep',async arg=>this.display(this.stepId(arg),false,false,true));
     command('switchGoal',async arg=>{const service=this.ready();let target=typeof arg==='string'?arg:undefined;if(!target){target=(await vscode.window.showQuickPick(service.document.goals.map(g=>({label:g.title,id:g.id})),{title:'조사 목표 전환'}))?.id;}if(target){await service.switchGoal(target);}});
     command('setStatus',async arg=>{const stepId=this.stepId(arg),choice=await vscode.window.showQuickPick(Object.entries(statusLabels).map(([status,label])=>({label,status:status as Status})),{title:'조사 상태 — 확인은 CT 실측 확인과 다릅니다.'});if(choice){await this.ready().status(stepId,choice.status);await this.display(stepId,false);}});
     command('goParent',async()=>{const service=this.ready(),d=service.document,parent=d.steps.find(s=>s.id===d.currentStepId)?.parentStepId;requireValue(parent,'현재 단계의 상위 조사가 없습니다.');await this.display(parent,true,true);});

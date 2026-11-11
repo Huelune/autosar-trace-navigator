@@ -23,10 +23,13 @@ export function decodeDetailMessage(value: unknown, expectedStep: string): Detai
 export class DetailsPanel implements vscode.Disposable {
   private panel?:vscode.WebviewPanel; private stepId?:string;
   constructor(private readonly action:(value:DetailAction)=>Promise<void>,private readonly failed:(error:unknown)=>void){}
-  show(step:InvestigationStep, anchor:CodeAnchor, locationState:string, evidence:Evidence[], dirty:boolean):void {
+  get isOpen():boolean{return this.panel!==undefined;}
+  /** With open=false an already open panel is refreshed in place; a closed one stays closed and nothing is brought to the front. */
+  show(step:InvestigationStep, anchor:CodeAnchor, locationState:string, evidence:Evidence[], dirty:boolean, open:boolean):void {
+    if(!this.panel&&!open){this.stepId=undefined;return;}
     if(!this.panel){this.panel=vscode.window.createWebviewPanel('branchInvestigation.details','조사 코드와 상세',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[],retainContextWhenHidden:true});this.panel.onDidDispose(()=>{this.panel=undefined;this.stepId=undefined;});this.panel.webview.onDidReceiveMessage((m:unknown)=>{try{requireValue(this.stepId,'선택된 단계가 없습니다.');const action=decodeDetailMessage(m,this.stepId);void this.action(action).catch(this.failed);}catch(e){this.failed(e);}});}
     this.stepId=step.id; const token=nonce();
-    this.panel.webview.html=shell('조사 상세',detailBody(step,anchor,locationState,evidence,dirty),detailScript(step.id),token);this.panel.reveal(vscode.ViewColumn.Two,true);
+    this.panel.webview.html=shell('조사 상세',detailBody(step,anchor,locationState,evidence,dirty),detailScript(step.id),token);if(open){this.panel.reveal(vscode.ViewColumn.Two,true);}
   }
   dispose():void{this.panel?.dispose();}
 }
