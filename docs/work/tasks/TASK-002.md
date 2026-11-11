@@ -10,6 +10,8 @@
 ## 목적과 승인 범위
 
 VS Code에서 기존 Python 분석 엔진의 후보 조회를 재사용한다.
+요구사항은 [원본 구현 지시서](../../branch-investigation/05_Codex_VSCode확장_구현지시서.md)의 3·6·10·11절과
+[P0 결과](../../branch-investigation/P0_구현_검증결과.md)를 함께 읽으며, 원문을 이 카드의 요약으로 대체하지 않는다.
 **2026-11-11 사용자가 승인한 1차 범위**: 커서가 있는 함수의 호출 후보와 RTE Writer 후보를 조회하고,
 고른 후보만 이유와 함께 하위 단계로 추가한다. 값 출처·실행 조건 후보, 함수 검색, 결과 캐시는 승인 범위가 아니다.
 기존 포트는 `extensions/branch-investigation/src/adapters/traceAnalysisPort.ts`이며 Python 분석을 TS로 중복 구현하지 않는다.

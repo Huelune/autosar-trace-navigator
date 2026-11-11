@@ -3,9 +3,11 @@
 ## 처음 읽을 것
 
 1. [AGENTS.md](AGENTS.md): 공통 설계·테스트·커밋 규칙. Claude Code는 [CLAUDE.md](CLAUDE.md)에서 가져온다.
-2. [현재 상태](docs/work/STATUS.md): 구현된 기능, 검증 근거와 남은 일.
-3. [작업 공유 절차](docs/work/README.md): 작업 카드, 세션 기록, 인수인계와 복사할 시작 프롬프트.
-4. [아키텍처](docs/architecture.md), 담당 영역의 README와 코드.
+2. **VS Code 작업은 [원본 구현 지시서](docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md)**:
+   무엇을 구현하는지에 대한 목적·기능·데이터 계약·단계별 완료 기준. [이어받는 순서](docs/branch-investigation/README.md)도 확인한다.
+3. [현재 상태](docs/work/STATUS.md): 구현된 기능, 검증 근거와 남은 일.
+4. [작업 공유 절차](docs/work/README.md): 작업 카드, 세션 기록, 인수인계와 복사할 시작 프롬프트.
+5. [아키텍처](docs/architecture.md), 담당 영역의 README와 코드.
 
 ## 새 PC 구성
 

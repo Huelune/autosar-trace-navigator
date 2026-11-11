@@ -1,12 +1,14 @@
-# Branch Investigation — VS Code 확장 P0
+# Branch Investigation — VS Code 확장
 
 선택한 C/H 코드와 **왜 선택했는지**, 최초 목표와 대체 경로를 VS Code 안에서 기록하고 재방문합니다.
-Python이나 Tkinter 창을 실행하지 않습니다. 원본 소스는 수정하지 않습니다.
+수동 기록은 Python 없이 동작하며 Tkinter 창을 열지 않습니다. 관련 후보 조회를 설정한 경우에만 로컬 Python 분석 엔진을 실행합니다.
+원본 소스는 수정하지 않습니다.
 
 ## 설치와 실행
 
 승인된 PC의 VS Code **1.95 이상**에서 Extensions의 `… → Install from VSIX…`로
-`branch-investigation-0.1.0.vsix`를 선택합니다. 설치 후 인터넷이나 Python 패키지는 필요하지 않습니다.
+`branch-investigation-0.1.0.vsix`를 선택합니다. 수동 기록에는 설치 후 인터넷이나 Python 패키지가 필요하지 않습니다.
+관련 후보 조회에는 별도로 설치한 Python 분석 엔진이 필요합니다.
 터미널에서 설치할 수 있는 환경이라면 `code --install-extension 경로/branch-investigation-0.1.0.vsix`도 가능합니다.
 Marketplace 게시나 자동 업데이트 기능은 이 확장이 제공하지 않습니다.
 
@@ -127,7 +129,7 @@ VS Code CLI를 별도로 실행합니다. 테스트 프로필만 사용하며 �
 
 설정하지 않으면 Python을 실행하지 않으며 위의 수동 기록은 그대로 동작합니다.
 
-1. 분석 엔진이 설치된 Python을 준비합니다. 저장소 루트의 [환경 구성](../../CONTRIBUTING.md)으로 만든 `.venv`의 Python을 쓸 수 있습니다.
+1. 분석 엔진이 설치된 Python을 준비합니다. 저장소 루트의 [환경 구성](https://github.com/Huelune/autosar-trace-navigator/blob/main/CONTRIBUTING.md)으로 만든 `.venv`의 Python을 쓸 수 있습니다.
 2. **사용자 설정**의 `branchInvestigation.pythonPath`에 그 Python 실행 파일의 전체 경로를 넣습니다.
    작업 공간 설정 파일에서는 지정할 수 없습니다. 열어 본 폴더가 실행 파일을 고르지 못하게 하기 위해서입니다.
 3. `branchInvestigation.analysisPaths`에 분석할 폴더를 작업 폴더 기준으로 넣습니다. 폴더 전체는 `.` 입니다.
