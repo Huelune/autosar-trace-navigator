@@ -53,10 +53,14 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-003](tasks/TASK-003.md) | 원본 구현 지시서 누락 공유 복구 | 완료 (검증·공유는 연결 세션) |
 | [TASK-004](tasks/TASK-004.md) | 확장의 값 출처·실행 조건 후보 연결 | 완료, 원격 기능 브랜치 (main 미반영) |
 | [TASK-005](tasks/TASK-005.md) | 기능 브랜치와 main 인계 통합 | 완료, 로컬 전용 (push·PR 미수행) |
+| [TASK-006](tasks/TASK-006.md) | Notion 프로젝트·작업 이력 등록 준비 | 완료, 로컬 전용 (Notion 외부 변경 없음) |
 
 P1의 다른 후보는 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import다.
 이들은 지금 구현하도록 승인된 범위가 아니다. 요청받은 항목만 별도 카드로 나누고 완료 조건부터 정한다.
 P2 그래프·성능 확대와 CT 자동 조작은 현재 작업에 포함하지 않는다.
+
+Notion 기록을 실행할 때는 [등록 준비안](../notion-registration.md)에 따라 현재 공용 데이터 소스 스키마와 중복을 다시 확인한다.
+TASK-005는 로컬 전용·부분 검증 상태이므로 실제 등록 전까지 Projects·Work Items·Dev Logs·Portfolio가 생성되지 않았다.
 
 다른 PC의 첫 행동은 [CONTRIBUTING](../../CONTRIBUTING.md)에 따라 환경과 대상 커밋을 확인하고,
 담당 카드로 **새 세션**을 시작하는 것이다. 과거 세션을 자신의 수행 기록으로 덮어쓰지 않는다.

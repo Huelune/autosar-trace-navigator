@@ -2,6 +2,11 @@
 
 ## Unreleased
 
+### Notion 프로젝트 기록 준비
+- 현재 개발 포트폴리오의 Projects·Project Areas·Work Items·Dev Logs·Portfolio 스키마와 중복을 확인.
+- 프로젝트 기준 문서, 영역, 완료 작업과 개발 이력의 등록값·관계·본문 초안 및 사후 검증 체크리스트를 작성.
+- 로컬 통합을 main 반영으로 과장하지 않고 로컬 전용·부분 검증으로 유지하며 Portfolio 등록을 보류.
+
 ### 기능 브랜치와 main 인계 통합
 - Python 분석 연결과 VS Code 조사 UX 기능을 최신 main의 원본 명세·인계 문서와 함께 통합.
 - 중복된 작업 번호를 분리하고 완료된 TASK-002·TASK-004와 명세 복구 TASK-003의 역할을 명확히 구분.
