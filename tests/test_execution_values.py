@@ -1,6 +1,7 @@
 """CT input boundaries and recursive execution prerequisites, not an input solver."""
 
 from pathlib import Path
+import gc
 import tempfile
 import tkinter as tk
 import unittest
@@ -143,6 +144,8 @@ class ExecutionGuiTests(unittest.TestCase):
     def tearDown(self):
         self.app.workbench.dirty = False
         self.app.close()
+        del self.app, self.root
+        gc.collect()  # finalize Tk objects before a later GUI test creates another interpreter
 
     def test_guard_preview_and_child_investigation_keep_goal_and_expose_ct_boundary(self):
         workbench = self.app.workbench
