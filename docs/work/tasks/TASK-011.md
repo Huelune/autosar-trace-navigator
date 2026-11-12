@@ -1,6 +1,6 @@
 # TASK-011 — 코드 변경 후 앵커 위치 후보 제안
 
-- 상태: review
+- 상태: done
 - 담당: claude-win (Claude Code)
 - 브랜치: feat/TASK-011-anchor-candidates
 - 기준 커밋: 349d1a79b16838238bb6792b97de9780f24b6c93
@@ -28,17 +28,16 @@
 - [x] 후보 검색 함수: 이동한 텍스트, 중복 텍스트의 문맥 순위, 없음, 줄바꿈 형식 변경, 개수 상한을 단위 테스트로 검증
 - [x] 위치 재연결 명령에 후보 목록·열어 보기·확인 연결, 선택 범위 재연결 유지
 - [x] 확장 단위 테스트 통과
-- [ ] VS Code Host 시나리오(후보 제안 → 거절 시 무변경 → 확인 시 재연결, 스니펫·목표 유지) 통과
-- [ ] 설치용 VSIX(`release/`) 재빌드
+- [x] VS Code Host 시나리오(후보 제안 → 거절 시 무변경 → 확인 시 재연결, 스니펫·목표 유지) 통과
+- [x] 설치용 VSIX(`release/`) 재빌드
 - [x] README·CHANGELOG·STATUS·세션 기록 갱신
 
 ## 진행과 검증
 
-구현과 단위 검증은 끝났다. Host 시나리오는 작성했지만 **실행하지 못했다**: 이 PC의 VS Code가 업데이트 적용 대기 상태라
-Host가 "업데이트 중"으로 시작을 거부했다. 확장 코드 문제가 아닌 환경 문제이며 두 번 시도해 같은 결과였다.
-UI 동작이 Host에서 확인되지 않았으므로 VSIX는 다시 만들지 않았고 `release/`의 VSIX에는 이 기능이 없다.
+완료. 처음에는 이 PC의 VS Code가 업데이트 대기 상태라 Host가 시작되지 않았고, 업데이트를 끝낸 뒤 다시 실행했다.
+단위 28개, Host의 record·restart·Restricted Mode와 8개 시나리오(새 후보 시나리오 포함), VSIX 별도 설치 확인이 통과했다.
+`release/`의 VSIX를 이 변경으로 다시 빌드했다. 후보 목록 화면을 사람이 직접 조작해 보지는 않았다.
 
 ## 인수인계 — 다음 첫 행동
 
-VS Code 업데이트가 끝난 뒤 `extensions/branch-investigation`에서 `npm run test:host`를 실행한다.
-통과하면 `npm run package:vsix`로 만든 VSIX를 `release/`에 반영하고 이 카드를 done으로 바꾼다. 실패하면 새로 추가한 Host 시나리오의 기대값부터 확인한다.
+작업 브랜치에만 있다. main 반영은 사용자 요청으로 PR을 만든다. 병합 후 다른 PC는 `todo.md` 1절을 다시 실행하면 새 VSIX를 받는다.

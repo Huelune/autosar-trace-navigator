@@ -66,7 +66,7 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 완료, PR #1로 main 반영 |
 | [TASK-009](tasks/TASK-009.md) | macOS 전체 테스트 실행 안정화 | 완료, PR #2로 main 반영 |
 | [TASK-010](tasks/TASK-010.md) | 병합 후 인계 문서 정정 | 완료, PR #3으로 main 반영 |
-| [TASK-011](tasks/TASK-011.md) | 코드 변경 후 앵커 위치 후보 제안 | review — Host 검증·VSIX 재빌드 대기 (카드 참조) |
+| [TASK-011](tasks/TASK-011.md) | 코드 변경 후 앵커 위치 후보 제안 | 완료, `feat/TASK-011-anchor-candidates` 브랜치 |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
 P1의 다른 후보는 검색/필터, 일괄 스니펫, 기존 SQLite 읽기 import, 함수 검색·결과 캐시다.
