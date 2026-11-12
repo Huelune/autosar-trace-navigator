@@ -7,7 +7,7 @@ import { InvestigationService, GoalInput, StepLink } from './domain/investigatio
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
-import { resolveAnchor, AnchorResolution } from './navigation/anchorResolver';
+import { AnchorCandidate, anchorCandidates, resolveAnchor, AnchorResolution } from './navigation/anchorResolver';
 import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
@@ -54,6 +54,28 @@ export class InvestigationController {
     const reason=await this.prompts.input({title:'현재 조사에 추가',prompt:inherited?'이 코드를 선택한 이유 (필수) — 상위 단계의 이유를 가져왔습니다. 고쳐 쓰세요.':'이 코드를 선택한 이유 (필수)',value:inherited,validateInput:v=>v.trim()&&v.length<=65536?undefined:'이유를 입력하세요.'});if(!reason?.trim()){return;}
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
     const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
+  }
+  /**
+   * Relink a step to the editor selection or to a same-file place where the saved snippet text occurs now.
+   * Candidates are text matches, so nothing is relinked without the confirmation, even when there is exactly one.
+   */
+  private async repair(stepId:string,snapshot?:SelectionSnapshot):Promise<void>{
+    const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
+    let doc:vscode.TextDocument|undefined,found:ReturnType<typeof anchorCandidates>={candidates:[],truncated:false};
+    if(anchor.fileUri){try{await sourcePath(this.root!,anchor.fileUri);doc=await vscode.workspace.openTextDocument(vscode.Uri.parse(anchor.fileUri));found=anchorCandidates(doc.getText(),step.snippet,anchor);}catch{/* Missing or out-of-workspace file: only the manual selection remains. */}}
+    const candidates=found.candidates.filter(c=>JSON.stringify(c.range)!==JSON.stringify(anchor.range));
+    if(!candidates.length){requireValue(snapshot,doc?'같은 파일에서 저장한 코드와 같은 텍스트를 찾지 못했습니다. 소스에서 범위를 직접 선택한 뒤 다시 실행하세요.':'후보를 찾을 파일이 없습니다. 재연결할 코드 범위를 선택한 뒤 다시 실행하세요.');}
+    else{
+      const context={both:'앞뒤 문맥 일치',partial:'문맥 일부 일치',none:'문맥 불일치'},at=(p:{line:number;character:number})=>`L${p.line+1}:${p.character+1}`;
+      const items:(vscode.QuickPickItem&{range?:AnchorCandidate['range']})[]=candidates.map(c=>({label:`후보 ${at(c.range.start)}`,description:`${context[c.context]}${c.lineDelta===undefined?'':c.lineDelta?` · 저장 위치에서 ${c.lineDelta>0?'+':''}${c.lineDelta}줄`:' · 같은 줄'}`,detail:doc!.lineAt(c.range.start.line).text.trim().slice(0,120),range:c.range}));
+      if(snapshot){items.push({label:'현재 선택 범위로 재연결',description:at(snapshot.range.start)});}
+      const options={title:`위치 후보 ${candidates.length}개${found.truncated?' (일부만 표시)':''} — 저장한 코드와 텍스트가 같은 곳이며 같은 코드라는 증명이 아닙니다.`,placeHolder:'고른 뒤 한 번 더 확인합니다. 저장 당시 스니펫과 목표는 유지합니다.',matchOnDescription:true,matchOnDetail:true};
+      const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));if(!picked){return;}
+      if(picked.range){const r=new vscode.Range(picked.range.start.line,picked.range.start.character,picked.range.end.line,picked.range.end.character);
+        const editor=await vscode.window.showTextDocument(doc!,{viewColumn:vscode.ViewColumn.One,selection:r,preserveFocus:false});editor.revealRange(r,vscode.TextEditorRevealType.InCenterIfOutsideViewport);snapshot=this.snapshotOf(doc!,r);}
+    }
+    const capture=await this.capture(snapshot!),message='이 범위로 위치만 재연결할까요? 저장 당시 스니펫과 목표는 유지합니다.';
+    if(this.prompts.confirm?await this.prompts.confirm(message):await vscode.window.showWarningMessage(message,{modal:true},'재연결')==='재연결'){await service.repair(stepId,capture);await this.display(stepId,false);}
   }
   /** panel=true only for the explicit 자세히 보기 command; every other path, including a click on a step, leaves a closed detail panel closed. */
   private async display(stepId:string,openSource:boolean,record=false,panel=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
@@ -122,7 +144,7 @@ export class InvestigationController {
     command('setStatus',async arg=>{const stepId=this.stepId(arg),choice=await vscode.window.showQuickPick(Object.entries(statusLabels).map(([status,label])=>({label,status:status as Status})),{title:'조사 상태 — 확인은 CT 실측 확인과 다릅니다.'});if(choice){await this.ready().status(stepId,choice.status);await this.display(stepId,false);}});
     command('goParent',async()=>{const service=this.ready(),d=service.document,parent=d.steps.find(s=>s.id===d.currentStepId)?.parentStepId;requireValue(parent,'현재 단계의 상위 조사가 없습니다.');await this.display(parent,true,true);});
     for(const [name,delta] of [['navigateBack',-1],['navigateForward',1]] as const){command(name,async()=>{const stepId=await this.ready().navigate(delta);if(stepId){await this.display(stepId,true,false);}});}
-    command('repairAnchor',async(arg,snapshot)=>{const stepId=this.stepId(arg);requireValue(snapshot,'재연결할 파일의 코드 범위를 선택하세요.');const capture=await this.capture(snapshot);if(await vscode.window.showWarningMessage('이 범위로 위치만 재연결할까요? 저장 당시 스니펫과 목표는 유지합니다.',{modal:true},'재연결')==='재연결'){await this.ready().repair(stepId,capture);await this.display(stepId,false);}},true);
+    command('repairAnchor',async(arg,snapshot)=>this.repair(this.stepId(arg),snapshot),true);
     // Deleting is the only command that discards records, so it always asks first and says how far it reaches.
     const confirm=async(message:string)=>this.prompts.confirm?this.prompts.confirm(message):await vscode.window.showWarningMessage(message,{modal:true,detail:'근거와 방문 이력도 함께 지웁니다. 지운 직후에는 "마지막 정상 백업 복구"로 되돌릴 수 있습니다.'},'지우기')==='지우기';
     const afterDelete=async()=>{const current=this.ready().document.currentStepId;if(current){await this.display(current,false);}else{this.details.dispose();}};

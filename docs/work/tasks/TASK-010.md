@@ -36,5 +36,5 @@ PR #1 병합 뒤에도 병합 전 상태로 남은 설치 절차와 인계 문�
 
 ## 인수인계 — 다음 첫 행동
 
-[PR #3](https://github.com/Huelune/autosar-trace-navigator/pull/3)이 열려 있다. 병합은 사용자 요청이 필요하다.
+[PR #3](https://github.com/Huelune/autosar-trace-navigator/pull/3)을 사용자 요청으로 main에 병합했다(`349d1a7`).
 그다음은 `todo.md` 1절의 실사용 결과를 받거나, 사용자가 고른 P1 항목을 새 카드로 시작한다.

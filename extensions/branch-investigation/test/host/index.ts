@@ -73,6 +73,15 @@ export async function run():Promise<void>{
       await command('deleteGoal',{kind:'goal',id:extra});assert.ok(!service.document.goals.some(g=>g.id===extra));assert.equal(service.document.currentGoalId,undefined);await command('switchGoal',before.currentGoalId);await command('openStep',writer);
       console.log('PASS Host: delete asks first / declined keeps everything / step subtree and goal removed');}
     const edited=await select('unicode.c','else return 1;');await edited.editor.edit(b=>b.insert(new vscode.Position(0,0),'// unsaved\r\n'));assert.equal(edited.doc.isDirty,true);await command('openStep',first.id);assert.equal(resolutionState(),'needs_review');assert.equal(service.document.steps[0].snippet,original.snippet);
+    {// Anchor candidates: the unsaved line above moved the saved text one line down. It is offered, never applied without the confirmation.
+      const stepOf=()=>service.document.steps.find(s=>s.id===first.id)!,oldAnchor=stepOf().codeAnchorId,goalBefore=JSON.stringify(stepOf().goalSnapshot);let offered:string[]=[];
+      const pick=async<T extends vscode.QuickPickItem>(items:T[])=>{offered=items.map(i=>`${i.label}|${i.description}`);return items[0];};
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick,confirm:async()=>false});await command('repairAnchor',first.id);
+      assert.deepEqual(offered,['후보 L3:3|앞뒤 문맥 일치 · 저장 위치에서 +1줄','현재 선택 범위로 재연결|L4:3']);assert.equal(stepOf().codeAnchorId,oldAnchor,'declined confirmation relinks nothing');
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick,confirm:async()=>true});await command('repairAnchor',first.id);
+      const relinked=service.document.anchors.find(a=>a.id===stepOf().codeAnchorId)!;assert.notEqual(relinked.id,oldAnchor);assert.deepEqual(relinked.range,{start:{line:2,character:2},end:{line:3,character:16}});
+      assert.equal(resolutionState(),'verified');assert.equal(stepOf().snippet,original.snippet);assert.equal(JSON.stringify(stepOf().goalSnapshot),goalBefore);
+      console.log('PASS Host: moved text offered as anchor candidate / declined keeps anchor / confirmed relinks with snippet and goal kept');}
     await fs.unlink(path.join(root,'producer.c'));await command('openStep',writer);assert.equal(resolutionState(),'missing');
     app.setPromptsForTests({input:async()=> '파일 미연결 수동 조사',snippet:async()=> '수동 스니펫\n조건 가설'});await command('addSnippet');const manual=service.document.steps.at(-1)!;assert.equal(manual.snippet,'수동 스니펫\n조건 가설');await command('openStep',manual.id);assert.equal(resolutionState(),'snippet_only');
     assert.throws(()=>decodeDetailMessage({type:'execute',stepId:manual.id,command:'bad'},manual.id));assert.throws(()=>decodeDetailMessage({type:'save',stepId:first.id,edit:{}},manual.id));
