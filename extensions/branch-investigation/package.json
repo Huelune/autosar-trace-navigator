@@ -107,7 +107,7 @@
       },
       {
         "command": "branchInvestigation.repairAnchor",
-        "title": "선택 범위로 위치 재연결",
+        "title": "위치 재연결 (후보 찾기·선택 범위)",
         "category": "분기 조사"
       },
       {

@@ -65,10 +65,11 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-007](tasks/TASK-007.md) | 검증된 작업 브랜치 자동 push 정책 | 완료, main 반영 |
 | [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 완료, PR #1로 main 반영 |
 | [TASK-009](tasks/TASK-009.md) | macOS 전체 테스트 실행 안정화 | 완료, PR #2로 main 반영 |
-| [TASK-010](tasks/TASK-010.md) | 병합 후 인계 문서 정정 | 완료 (main 반영 여부는 카드) |
+| [TASK-010](tasks/TASK-010.md) | 병합 후 인계 문서 정정 | 완료, PR #3으로 main 반영 |
+| [TASK-011](tasks/TASK-011.md) | 코드 변경 후 앵커 위치 후보 제안 | review — Host 검증·VSIX 재빌드 대기 (카드 참조) |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
-P1의 다른 후보는 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import, 함수 검색·결과 캐시다.
+P1의 다른 후보는 검색/필터, 일괄 스니펫, 기존 SQLite 읽기 import, 함수 검색·결과 캐시다.
 이들은 지금 구현하도록 승인된 범위가 아니다. 요청받은 항목만 별도 카드로 나누고 완료 조건부터 정한다.
 P2 그래프·성능 확대와 CT 자동 조작은 현재 작업에 포함하지 않는다.
 
