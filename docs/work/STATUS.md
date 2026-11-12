@@ -45,9 +45,11 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
   실행 코드는 변경하지 않았다. 원격 공유 커밋은 카드의 연결 세션과 Git 이력으로 확인한다.
 - **Notion 등록·통합 검증(TASK-008)**: 확장 단위 27개, VS Code Host record·restart·Restricted Mode 및 7개 시나리오,
   Python 비-GUI 122개와 추가 환경·값·구조체·튜토리얼 20개, 시스템 Clang 기반 C 216개 통과.
-  macOS Tk GUI 전체와 Zig 0.15.2 C 경로는 미검증이므로 프로젝트 검증 상태는 부분 검증을 유지한다.
-- **병합 후 main 재확인(TASK-009)**: Windows x64 / Python 3.14.6 / uv 0.11.21 / Node 26.13.0에서
-  새 uv 환경의 전체 Python **191개**(Tk GUI·C 시나리오 216개 포함)와 확장 단위 27개 통과, 실패/skip 없음.
+  당시 macOS Tk GUI 전체와 Zig 0.15.2 설치 환경의 C 경로는 미검증으로 남겼다.
+- **macOS 전체 테스트 안정화(TASK-009)**: Zig 0.15.2가 설치된 표준 uv 환경에서 macOS 시스템 Clang을 선택하고
+  연속 Tk 이벤트 처리를 보정한 뒤 전체 Python 193개와 C 시나리오 216개를 실패·skip 없이 통과했다.
+- **병합 후 main 재확인(TASK-010)**: Windows x64 / Python 3.14.6 / uv 0.11.21 / Node 26.13.0에서
+  TASK-009 변경을 합친 뒤 새 uv 환경의 전체 Python **193개**(Tk GUI·C 시나리오 216개 포함)와 확장 단위 27개 통과, 실패/skip 없음.
   VS Code Host는 이번에 실행하지 않았다. 위 177개·171개는 당시 기록이다.
 
 ## 작업 목록과 남은 일
@@ -62,7 +64,8 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-006](tasks/TASK-006.md) | Notion 프로젝트·작업 이력 등록 준비 | 완료, main 반영 |
 | [TASK-007](tasks/TASK-007.md) | 검증된 작업 브랜치 자동 push 정책 | 완료, main 반영 |
 | [TASK-008](tasks/TASK-008.md) | Notion 실제 등록·교차 플랫폼 검증·통합 PR | 완료, PR #1로 main 반영 |
-| [TASK-009](tasks/TASK-009.md) | 병합 후 설치 절차와 인계 문서 정정 | 완료 (main 반영 여부는 카드) |
+| [TASK-009](tasks/TASK-009.md) | macOS 전체 테스트 실행 안정화 | 완료, PR #2로 main 반영 |
+| [TASK-010](tasks/TASK-010.md) | 병합 후 인계 문서 정정 | 완료 (main 반영 여부는 카드) |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
 P1의 다른 후보는 검색/필터, 일괄 스니펫, 위치 복구 후보, 기존 SQLite 읽기 import, 함수 검색·결과 캐시다.
