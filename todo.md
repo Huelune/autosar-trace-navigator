@@ -10,12 +10,14 @@ Claude가 실행할 수 없는 환경(다른 PC 등)에서 돌릴 것을 적는�
 **필요한 것**: Git, VS Code 1.95 이상(`code` 명령), Python 3.11~3.14, 그리고 설치 때 한 번의 인터넷 연결(GitHub, PyPI).
 PowerShell과 Node/npm은 필요 없다. 회사 PC라면 VSIX 설치와 Python 실행이 허용되는지 먼저 확인한다.
 
-**실행**: 명령 프롬프트(cmd) 창에 아래 세 줄을 붙여 넣고 Enter를 누른다.
+**실행**: 명령 프롬프트(cmd) 창에 아래 네 줄을 붙여 넣고 Enter를 누른다. 다른 PC는 **`main` 브랜치만** 쓴다.
 사용자 홈 폴더 아래 `autosar-trace-navigator`에 설치한다. 다시 붙여 넣으면 최신 커밋으로 갱신하고 다시 설치한다
 (이때 첫 줄은 "이미 있다"는 오류를 내지만 정상이며, 결과 화면은 마지막에 새로 그려진다).
+전에 작업 브랜치로 받아 둔 폴더도 둘째 줄이 `main`으로 바꿔 준다.
 
 ```bat
-git clone --branch feat/repo-analysis-aa2e6b https://github.com/Huelune/autosar-trace-navigator.git "%USERPROFILE%\autosar-trace-navigator"
+git clone --branch main https://github.com/Huelune/autosar-trace-navigator.git "%USERPROFILE%\autosar-trace-navigator"
+git -C "%USERPROFILE%\autosar-trace-navigator" checkout main
 git -C "%USERPROFILE%\autosar-trace-navigator" pull --ff-only
 python "%USERPROFILE%\autosar-trace-navigator\scripts\install.py"
 ```
