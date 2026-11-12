@@ -14,19 +14,25 @@ from unittest import SkipTest
 ROOT = Path(__file__).resolve().parents[1]
 
 
+def compiler_command() -> list[str]:
+    """Return a C compiler command suitable for the current host."""
+    if sys.platform == "darwin" and (cc := (shutil.which("clang") or shutil.which("cc"))):
+        return [cc]
+    if importlib.util.find_spec("ziglang") is not None:
+        return [sys.executable, "-m", "ziglang", "cc"]
+    local_zig = ROOT / ".venv/c-tools/ziglang/zig.exe"
+    if local_zig.is_file():
+        return [str(local_zig), "cc"]
+    if zig := shutil.which("zig"):
+        return [zig, "cc"]
+    if cc := (shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")):
+        return [cc]
+    raise SkipTest("C compiler unavailable; see test/README.md")
+
+
 def run_c99(sources: Iterable[Path], *, include_dirs: Iterable[Path] = ()) -> str:
     """Compile with warnings as errors, run a disposable binary and return stdout."""
-    local_zig = ROOT / ".venv/c-tools/ziglang/zig.exe"
-    if importlib.util.find_spec("ziglang") is not None:
-        compiler = [sys.executable, "-m", "ziglang", "cc"]
-    elif local_zig.is_file():
-        compiler = [str(local_zig), "cc"]
-    elif zig := shutil.which("zig"):
-        compiler = [zig, "cc"]
-    elif cc := (shutil.which("gcc") or shutil.which("clang") or shutil.which("cc")):
-        compiler = [cc]
-    else:
-        raise SkipTest("C compiler unavailable; see test/README.md")
+    compiler = compiler_command()
     build = ROOT / "build"
     build.mkdir(exist_ok=True)
     with tempfile.TemporaryDirectory(prefix="c-execution-", dir=build) as directory:

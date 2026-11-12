@@ -72,8 +72,10 @@ python -m uv sync --locked --group test
 python -m uv run --locked --group test python -m unittest discover -s tests -v
 ```
 
-현재 Python 환경의 ziglang 패키지를 우선 사용하며, 기존 `.venv/c-tools/ziglang/zig.exe`와
-PATH의 Zig/GCC/Clang도 계속 지원합니다. 없으면 C 실행 테스트만 skip됩니다.
+macOS에서는 현재 SDK와 시스템 라이브러리를 확실히 연결하는 PATH의 Clang을 우선 사용합니다.
+그 밖의 OS에서는 현재 Python 환경의 ziglang 패키지를 우선 사용하며, 기존
+`.venv/c-tools/ziglang/zig.exe`와 PATH의 Zig/GCC/Clang도 계속 지원합니다. 없으면 C 실행
+테스트만 skip됩니다.
 pip 사용 시 `.venv\Scripts\python -m pip install ziglang==0.15.2`로도 준비할 수 있습니다.
 
 오프라인 PC에는 해당 OS용 컴파일러도 미리 준비해야 합니다. 테스트 실행 중 다운로드는

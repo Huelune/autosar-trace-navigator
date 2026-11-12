@@ -1,6 +1,7 @@
 """Real Tk widget tests; no screenshots or mocked widget implementation."""
 
 from concurrent.futures import Future
+import _tkinter
 from pathlib import Path
 import tempfile
 import subprocess
@@ -147,7 +148,7 @@ class GuiTests(unittest.TestCase):
         self.app.begin_analysis(ROOT / "test")
         deadline = time.monotonic() + 10
         while self.app.busy and time.monotonic() < deadline:
-            self.root.update()
+            self.root.tk.dooneevent(_tkinter.ALL_EVENTS | _tkinter.DONT_WAIT)
             time.sleep(0.01)
         self.assertFalse(self.app.busy)
         self.assertIn("분석 완료", self.app.status.get())
