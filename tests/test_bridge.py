@@ -179,6 +179,39 @@ class BridgeTests(unittest.TestCase):
         self.assertNotIn(b"secret", bad.stdout)
         self.assertEqual(json.loads(run(b"not json").stdout), {"ok": False, "error": "invalid_request"})
 
+    def test_function_list_is_sorted_scoped_and_points_at_signatures(self):
+        with tempfile.TemporaryDirectory() as folder:
+            root = Path(folder).resolve()
+            (root / "in").mkdir()
+            (root / "out").mkdir()
+            write(root, "in/a.c", "/* 한 */ static int zeta(int a)\n{\n  return a;\n}\nvoid Alpha(void) { }\n")
+            write(root, "out/secret.c", "void Hidden(void) { }\n")
+            found = bridge.functions({"root": str(root), "includePaths": ["in"]})
+            self.assertEqual((found["ok"], found["truncated"]), (True, False))
+            self.assertEqual([item["name"] for item in found["functions"]], ["Alpha", "zeta"])
+            self.assertEqual(found["functions"][1]["signature"],
+                             {"path": "in/a.c", "startLine": 0, "endLine": 0, "startCharacter": 8,
+                              "endCharacter": 30, "text": "static int zeta(int a)"})
+            self.assertNotIn(str(root), json.dumps(found))
+            limit, bridge.MAX_FUNCTIONS = bridge.MAX_FUNCTIONS, 1
+            try:
+                cut = bridge.functions({"root": str(root), "includePaths": ["in"]})
+            finally:
+                bridge.MAX_FUNCTIONS = limit
+            self.assertEqual(([item["name"] for item in cut["functions"]], cut["truncated"]), (["Alpha"], True))
+        for request, code in (([], "invalid_request"), ({"root": "relative", "includePaths": []}, "invalid_request"),
+                              ({"root": str(ROOT / "test"), "includePaths": "src"}, "invalid_request"),
+                              ({"root": str(ROOT / "secret_missing"), "includePaths": []}, "scope_not_readable")):
+            with self.subTest(code=code):
+                with self.assertRaises(bridge.BridgeError) as raised:
+                    bridge.functions(request)
+                self.assertEqual(raised.exception.args, (code,))
+        done = subprocess.run([sys.executable, "-I", "-m", "autosar_trace_navigator.bridge"], capture_output=True,
+                              input=json.dumps({"op": "functions", "root": str(ROOT / "test"),
+                                                "includePaths": SCOPE}).encode(), timeout=120)
+        self.assertEqual((done.returncode, done.stderr), (0, b""))
+        self.assertIn("ReadRawSpeed", [item["name"] for item in json.loads(done.stdout)["functions"]])
+
 
 if __name__ == "__main__":
     unittest.main()

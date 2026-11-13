@@ -14,6 +14,7 @@ from .workbench import AnalysisLimitError, ProjectSnapshot, analyze_project, fun
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_CANDIDATES = 200
+MAX_FUNCTIONS = 5000
 MAX_TEXT_CHARS = 20000
 MAX_NOTE_CHARS = 200
 
@@ -182,6 +183,31 @@ def related(request: object) -> dict:
             "candidates": candidates[:MAX_CANDIDATES], "truncated": len(candidates) > MAX_CANDIDATES}
 
 
+def functions(request: object) -> dict:
+    """Every function definition in the scope with its signature location, ordered by name.
+
+    The editor filters this list itself and keeps it until a source file changes, so
+    one analysis serves many searches. A missing name is missing from the scope only.
+    """
+    if not isinstance(request, dict):
+        raise BridgeError("invalid_request")
+    root, includes = request.get("root"), request.get("includePaths")
+    if (not isinstance(root, str) or not Path(root).is_absolute()
+            or not isinstance(includes, list) or not all(isinstance(item, str) for item in includes)):
+        raise BridgeError("invalid_request")
+    try:
+        project = analyze_project(root, include_paths=includes)
+    except AnalysisLimitError:
+        raise BridgeError("analysis_limit") from None
+    except (OSError, ValueError):
+        raise BridgeError("scope_not_readable") from None
+    sources = dict(project.sources)
+    found = sorted(project.functions, key=lambda item: (item.name.casefold(), item.location.path, item.location.start_byte))
+    return {"ok": True, "truncated": len(found) > MAX_FUNCTIONS,
+            "functions": [{"name": item.name, "signature": _location(project, sources, _signature(sources, item))}
+                          for item in found[:MAX_FUNCTIONS]]}
+
+
 def main() -> int:
     """Exit 0 for a result or a handled error code, 1 for an unexpected failure."""
     status = 0
@@ -193,7 +219,8 @@ def main() -> int:
             request = json.loads(raw)
         except ValueError:
             raise BridgeError("invalid_request") from None
-        response = related(request)
+        is_search = isinstance(request, dict) and request.get("op") == "functions"
+        response = functions(request) if is_search else related(request)
     except BridgeError as error:
         response = {"ok": False, "error": error.args[0]}
     except Exception:  # noqa: BLE001 - the traceback could expose paths or source text

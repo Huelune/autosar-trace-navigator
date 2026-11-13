@@ -90,6 +90,16 @@ export async function run():Promise<void>{
       const conditionStep=service.document.steps.find(s=>s.id===service.document.currentStepId)!,conditionEdge=service.document.relations.find(r=>r.toStepId===conditionStep.id)!;
       assert.equal(conditionStep.snippet,'(a < 60)');assert.equal(conditionEdge.type,'manual');assert.ok(conditionEdge.uncertainty.includes('execution_requirement_true'));assert.ok(conditionEdge.uncertainty.includes('condition_satisfiability_not_proven'));
       console.log('PASS Host: cursor variable value sources first / execution condition with needed truth recorded as prerequisite');
+      {// Function search: one engine run serves repeated searches; a changed C file drops the kept result. Picking goes to the signature and records nothing.
+        const wait=(ms:number)=>new Promise(r=>setTimeout(r,ms)),quiet=[service.document.steps.length,service.document.revision];let names:string[]=[],title='';
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async(items,options)=>{names=items.map(i=>i.label);title=options.title??'';return undefined;}});
+        app.analysisCache.clear();const runs=app.engineRuns;await command('searchFunctions');await command('searchFunctions');assert.equal(app.engineRuns,runs+1,'second search uses the kept list');
+        assert.ok(names.includes('Struct_ConsumePointer'),'defined function listed');assert.deepEqual(names,[...names].sort((a,b)=>a.toLowerCase()<b.toLowerCase()?-1:a.toLowerCase()>b.toLowerCase()?1:0));assert.ok(title.includes(`함수 ${names.length}개`));
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items.find(i=>i.label==='Struct_ConsumePointer')});await command('searchFunctions');
+        const at=vscode.window.activeTextEditor!;assert.match(at.document.getText(at.selection),/Struct_ConsumePointer\s*\(/);assert.ok(!at.document.getText(at.selection).includes('{'));assert.deepEqual([service.document.steps.length,service.document.revision],quiet);
+        await fs.writeFile(path.join(root,'added.c'),'void Host_AddedFunction(void)\n{\n}\n');for(let i=0;i<50&&app.analysisCache.size;i++){await wait(200);}assert.equal(app.analysisCache.size,0,'a changed source file drops kept results');
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{names=items.map(i=>i.label);return undefined;}});await command('searchFunctions');assert.equal(app.engineRuns,runs+2);assert.ok(names.includes('Host_AddedFunction'));
+        console.log('PASS Host: function search lists scope definitions / kept list reused / source change re-reads / pick only navigates');}
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
     {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';

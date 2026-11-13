@@ -9,7 +9,11 @@ export interface AnalysisCandidate { relation: typeof relations[number]; label: 
 export interface RelatedRequest { root: string; file: string; line: number; character: number; includePaths: string[] }
 /** variable is the access path under the cursor when the engine can trace it; notes are reason codes for what it could not do. */
 export interface RelatedResult { functionName: string | null; variable: string | null; notes: string[]; candidates: AnalysisCandidate[]; truncated: boolean }
-export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> }
+/** Every function definition of the analysis scope. signature is the declaration up to the body. */
+export interface FunctionsRequest { op: 'functions'; root: string; includePaths: string[] }
+export interface FunctionEntry { name: string; signature: EngineLocation }
+export interface FunctionsResult { functions: FunctionEntry[]; truncated: boolean }
+export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
 
 /** Kind and next action only. Engine or OS error text may contain paths and is never shown. */
 const messages = {
@@ -59,12 +63,22 @@ export function parseRelated(raw: string): RelatedResult {
   return { functionName: name, variable, notes: [...notes], candidates, truncated: r.truncated };
 }
 
+export function parseFunctions(raw: string): FunctionsResult {
+  let r: { ok?: unknown; error?: unknown; functions?: unknown; truncated?: unknown };
+  try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
+  if (r?.ok === false) { throw new AnalysisError(typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal'); }
+  if (r?.ok !== true || !Array.isArray(r.functions) || r.functions.length > 5000 || typeof r.truncated !== 'boolean') { throw new AnalysisError('invalid_response'); }
+  return { truncated: r.truncated, functions: r.functions.map((f: FunctionEntry) => { if (!text(f?.name, 1000) || !f.name) { throw new AnalysisError('invalid_response'); } return { name: f.name, signature: location(f.signature) }; }) };
+}
+
 /** One short-lived local process per request: no shell, no network, stderr discarded. */
 export class PythonTraceAnalysisPort implements TraceAnalysisPort {
-  // ponytail: every request re-parses the scope; switch to a long-lived process with a cached snapshot if this is measurably slow.
+  // ponytail: every request re-parses the scope; the caller keeps results until a source file changes. Switch to a long-lived process with a cached snapshot if a first request is measurably slow.
   constructor(private readonly python: string, private readonly args: readonly string[] = ['-I', '-m', 'autosar_trace_navigator.bridge'],
     private readonly timeoutMs = 60000, private readonly maxOutputBytes = 8 * 1024 * 1024) {}
-  related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> {
+  related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> { return this.run(request, signal, parseRelated); }
+  functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> { return this.run(request, signal, parseFunctions); }
+  private run<T>(request: object, signal: AbortSignal, parse: (raw: string) => T): Promise<T> {
     return new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new AnalysisError('cancelled')); return; }
       const child = spawn(this.python, [...this.args], { shell: false, windowsHide: true, stdio: ['pipe', 'pipe', 'ignore'] });
@@ -77,7 +91,7 @@ export class PythonTraceAnalysisPort implements TraceAnalysisPort {
       child.stdout.on('data', (chunk: Buffer) => { size += chunk.length; if (size > this.maxOutputBytes) { stop('output_limit'); } else { chunks.push(chunk); } });
       child.on('close', () => finish(() => {
         if (failure) { reject(new AnalysisError(failure)); return; }
-        try { resolve(parseRelated(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(e); }
+        try { resolve(parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(e); }
       }));
       child.stdin.on('error', () => {}); // a process that exits before reading is reported by 'close'
       child.stdin.end(JSON.stringify(request));
