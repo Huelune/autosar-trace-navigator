@@ -46,6 +46,13 @@ export async function run():Promise<void>{
       assert.equal(rows.length,counts[0]);const deferred=rows.filter(r=>r.description?.startsWith('보류'));assert.equal(deferred.length,1);assert.ok(deferred[0].description!.includes('정상 경로 통과')&&deferred[0].description!.includes('producer.c:'));assert.ok(deferred[0].detail!.includes('다음 할 일: 초기화와 갱신 순서 확인'));
       assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
+    {// Two routes from one step: the fork lists the first step of each route, and each first step says how long its route is and where the work is.
+      const item=(id:string)=>app.tree!.getTreeItem({kind:'step',id}),text=(id:string)=>`${item(id).label}|${item(id).description}`;
+      assert.deepEqual(app.tree!.getChildren({kind:'step',id:reader}).map(e=>e.id),[writer,sibling.id]);assert.match(text(writer),/^↳ .*\|▶ 보류 · 갈래 1단계$/);assert.match(text(sibling.id),/^↳ .*\|조사 중 · 갈래 1단계$/);
+      app.setPromptsForTests({input:async()=>'갈래 안의 다음 단계',snippet:async()=>'route_next();'});await command('openStep',sibling.id);await command('addSnippet');const deeper=service.document.currentStepId!;
+      assert.deepEqual(app.tree!.getChildren({kind:'step',id:sibling.id}).map(e=>e.id),[deeper]);assert.deepEqual(app.tree!.getParent({kind:'step',id:deeper}),{kind:'step',id:sibling.id});
+      assert.match(text(sibling.id),/\|조사 중 · 갈래 2단계 · ▶ 진행 중$/);assert.equal(item(sibling.id).collapsibleState,vscode.TreeItemCollapsibleState.Expanded);assert.match(text(writer),/\|보류 · 갈래 1단계$/);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async()=>true});await command('deleteStep',{kind:'step',id:deeper});await command('openStep',writer);}
     console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward / search visits the picked step only');
     {// Bulk paste: every split piece is offered ticked; only what stays ticked becomes a sibling step under the current step, which stays current.
       await command('openStep',writer);const counts=[service.document.steps.length,service.document.relations.length,service.document.revision];let shown:string[]=[];
