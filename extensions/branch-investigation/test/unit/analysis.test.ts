@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AnalysisError, parseRelated, PythonTraceAnalysisPort } from '../../src/adapters/traceAnalysisPort';
+import { AnalysisError, parseFunctions, parseRelated, PythonTraceAnalysisPort } from '../../src/adapters/traceAnalysisPort';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { CapturedCode, clone, emptyDocument } from '../../src/domain/model';
 
@@ -72,4 +72,18 @@ test('a picked candidate records its relation type and engine uncertainty; manua
   assert.deepEqual([linked.type, linked.uncertainty], ['data_dependency', ['name_only_connection', 'investigation_order_is_not_execution_order']]);
   assert.deepEqual([manual.type, manual.uncertainty], ['manual', ['investigation_order_is_not_execution_order']]);
   assert.deepEqual([required.type, required.uncertainty], ['manual', ['condition_satisfiability_not_proven', 'execution_requirement_false', 'investigation_order_is_not_execution_order']]);
+});
+
+test('function list request carries op and a reply is accepted only in the documented shape', async () => {
+  const signature = { path: 'src/a.c', startLine: 2, endLine: 2, startCharacter: 0, endCharacter: 14, text: 'void Alpha(void)' }, ok = { ok: true, truncated: false, functions: [{ name: 'Alpha', signature }] };
+  const echo = `let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const r=JSON.parse(d);process.stdout.write(JSON.stringify({ok:true,truncated:true,functions:[{name:r.op+':'+r.includePaths.join(','),signature:${JSON.stringify(signature)}}]}))})`;
+  const got = await fake(echo).functions({ op: 'functions', root: 'C:/virtual', includePaths: ['src', 'inc'] }, new AbortController().signal);
+  assert.deepEqual(got, { truncated: true, functions: [{ name: 'functions:src,inc', signature }] });
+  assert.equal(parseFunctions(JSON.stringify(ok)).functions[0].signature.startLine, 2);
+  for (const bad of [{ ...ok, truncated: 'no' }, { ...ok, functions: {} }, { ...ok, functions: [{ name: '', signature }] }, { ...ok, functions: [{ name: 'A', signature: { ...signature, path: '../secret.c' } }] },
+    { ...ok, functions: [{ name: 'A', signature: { ...signature, path: 'C:/secret.c' } }] }, { ...ok, functions: Array.from({ length: 5001 }, () => ({ name: 'A', signature })) }, { ok: true }]) {
+    assert.throws(() => parseFunctions(JSON.stringify(bad)), (e: AnalysisError) => e.code === 'invalid_response');
+  }
+  assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'analysis_limit' })), (e: AnalysisError) => e.code === 'analysis_limit');
+  assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'secret text' })), (e: AnalysisError) => e.code === 'internal' && !e.message.includes('secret'));
 });

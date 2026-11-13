@@ -39,5 +39,5 @@
 
 ## 인수인계 — 다음 첫 행동
 
-작업 브랜치에만 있다. main 반영은 사용자 요청으로 PR을 만든다.
+사용자 요청으로 [PR #8](https://github.com/Huelune/autosar-trace-navigator/pull/8)을 main에 병합했다(`c10b81f`).
 써 본 뒤 경로 항목을 파일에 바로 연결하기를 원하면 범위 밖 첫 항목을 새 카드로 승인받는다.

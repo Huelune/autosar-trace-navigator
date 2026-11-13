@@ -13,7 +13,7 @@ import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
 import { stepSearchItems } from './ui/stepSearch';
-import { PythonTraceAnalysisPort } from './adapters/traceAnalysisPort';
+import { EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
 
 export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; }
 export interface AnalysisSettings { python:string; paths:string[] }
@@ -100,14 +100,50 @@ export class InvestigationController {
     this.ready();const editor=vscode.window.activeTextEditor;
     requireValue(editor&&editor.document.uri.scheme==='file','C 파일의 함수 안에 커서를 두고 실행하세요.');
     requireValue(!editor.document.isDirty,'저장하지 않은 변경이 있습니다. 엔진은 디스크의 파일을 읽으므로 저장한 뒤 다시 조회하세요.');
+    const {python,paths,root}=await this.engine();
+    const file=path.relative(root,await sourcePath(this.root!,editor.document.uri.toString())).replaceAll('\\','/');
+    const request={root,file,line:editor.selection.start.line,character:editor.selection.start.character,includePaths:paths};
+    const result=await this.analysed('관련 후보 조회 중',['related',python,request],signal=>new PythonTraceAnalysisPort(python).related(request,signal));
+    return this.offerRelated(root,result);
+  }
+  /** Settings of the engine link, or an error that says which setting to fill in. */
+  private async engine():Promise<{python:string;paths:string[];root:string}>{
     const {python,paths}=this.analysisSettings();
     requireValue(python,'Python 분석 연결이 꺼져 있습니다. 사용자 설정 branchInvestigation.pythonPath에 분석 엔진이 설치된 Python 실행 파일을 지정하세요.');
     requireValue(Array.isArray(paths)&&paths.length>0&&paths.every(p=>typeof p==='string'&&p.trim()),'분석 범위가 없습니다. 설정 branchInvestigation.analysisPaths에 작업 폴더 기준 경로를 지정하세요. 폴더 전체는 "." 입니다.');
-    const root=await fs.realpath(this.root!),file=path.relative(root,await sourcePath(this.root!,editor.document.uri.toString())).replaceAll('\\','/');
-    const result=await vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:'분기 조사: 관련 후보 조회 중',cancellable:true},(_progress,token)=>{
-      const abort=new AbortController();token.onCancellationRequested(()=>abort.abort());
-      return new PythonTraceAnalysisPort(python).related({root,file,line:editor.selection.start.line,character:editor.selection.start.character,includePaths:paths},abort.signal);
-    });
+    return {python,paths,root:await fs.realpath(this.root!)};
+  }
+  /**
+   * Engine results are kept until a C/H file of the workspace changes on disk, so repeating a lookup or a search does not re-parse the scope.
+   * The key carries the interpreter and the whole request. A failed or cancelled run is not kept.
+   */
+  readonly analysisCache=new Map<string,Promise<unknown>>();engineRuns=0;
+  private analysed<T>(title:string,key:unknown,run:(signal:AbortSignal)=>Promise<T>):Promise<T>{
+    const k=JSON.stringify(key),hit=this.analysisCache.get(k) as Promise<T>|undefined;if(hit){return hit;}
+    const made=Promise.resolve(vscode.window.withProgress({location:vscode.ProgressLocation.Notification,title:`분기 조사: ${title}`,cancellable:true},(_progress,token)=>{
+      const abort=new AbortController();token.onCancellationRequested(()=>abort.abort());this.engineRuns++;return run(abort.signal);}));
+    this.analysisCache.set(k,made);made.catch(()=>{if(this.analysisCache.get(k)===made){this.analysisCache.delete(k);}});return made;
+  }
+  /** Open an engine location only when the editor text still equals what the engine read. */
+  private async openEngine(root:string,target:EngineLocation):Promise<{doc:vscode.TextDocument;range:vscode.Range}>{
+    const {text,startCharacter,endCharacter}=target;
+    requireValue(text!==null&&startCharacter!==null&&endCharacter!==null,'위치 확인 필요: 파일 인코딩을 확인할 수 없어 이동하지 않습니다. 소스를 직접 열어 범위를 선택한 뒤 추가하세요.');
+    // Error text from the file system may contain a path; report the kind only.
+    const real=await sourcePath(this.root!,pathToFileURL(path.join(root,target.path)).href).catch(()=>{throw new Error('위치 확인 필요: 후보 파일을 열 수 없습니다. 분석 범위와 파일을 확인하세요.');});
+    const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real)),range=new vscode.Range(target.startLine,startCharacter,target.endLine,endCharacter),same=(s:string)=>s.replaceAll('\r\n','\n');
+    requireValue(doc.validateRange(range).isEqual(range)&&same(doc.getText(range))===same(text),'위치 확인 필요: 편집기 내용이 분석한 내용과 다릅니다. 파일을 저장하거나 인코딩을 확인한 뒤 다시 조회하세요.');
+    const shown=await vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:range});shown.setDecorations(this.decoration,[range]);return {doc,range};
+  }
+  /** Function search: the list comes from the engine once and the quick pick filters it. Picking one only goes there and selects the signature. */
+  private async searchFunctions():Promise<void>{
+    this.ready();const {python,paths,root}=await this.engine(),request={op:'functions' as const,root,includePaths:paths};
+    const result=await this.analysed('함수 목록 읽는 중',['functions',python,request],signal=>new PythonTraceAnalysisPort(python).functions(request,signal));
+    if(!result.functions.length){void vscode.window.showInformationMessage('분석 범위 안에서 함수 정의를 찾지 못했습니다. 범위 밖에 없다는 뜻은 아닙니다.');return;}
+    const items=result.functions.map(f=>({label:f.name,description:`${f.signature.path}:${f.signature.startLine+1}`,entry:f}));
+    const options={title:`함수 ${items.length}개${result.truncated?' (이름순 앞부분만, 분석 범위를 줄이세요)':''} — 분석 범위 안의 정의만 보여 줍니다. 범위 밖에 없다는 뜻은 아닙니다.`,placeHolder:'함수 이름이나 경로의 일부를 입력하세요.',matchOnDescription:true};
+    const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));if(picked){await this.openEngine(root,picked.entry.signature);}
+  }
+  private async offerRelated(root:string,result:RelatedResult):Promise<void>{
     if(!result.functionName){void vscode.window.showInformationMessage('커서가 분석된 함수 안에 있지 않습니다.');return;}
     // Reason codes for what the engine could not do at the cursor. Unknown codes are not shown as text.
     const reasons:Record<string,string>={cursor_position_not_resolved:'커서 위치를 확정할 수 없어 값·조건 후보는 조회하지 못했습니다(파일 인코딩 확인).',access_path_not_supported:'커서의 배열·복합 경로는 값 추적을 지원하지 않습니다.',value_sources_not_available:'커서의 식은 값 출처를 조회할 수 없습니다.'};
@@ -120,13 +156,7 @@ export class InvestigationController {
     if(!picked){return;}
     const target=picked.candidate.target;
     requireValue(target,'분석 범위 안에서 정의를 찾지 못한 후보입니다. 분석 범위를 넓혀 다시 조회하세요.');
-    const {text,startCharacter,endCharacter}=target;
-    requireValue(text!==null&&startCharacter!==null&&endCharacter!==null,'위치 확인 필요: 파일 인코딩을 확인할 수 없어 이동하지 않습니다. 소스를 직접 열어 범위를 선택한 뒤 추가하세요.');
-    // Error text from the file system may contain a path; report the kind only.
-    const real=await sourcePath(this.root!,pathToFileURL(path.join(root,target.path)).href).catch(()=>{throw new Error('위치 확인 필요: 후보 파일을 열 수 없습니다. 분석 범위와 파일을 확인하세요.');});
-    const doc=await vscode.workspace.openTextDocument(vscode.Uri.file(real)),range=new vscode.Range(target.startLine,startCharacter,target.endLine,endCharacter),same=(s:string)=>s.replaceAll('\r\n','\n');
-    requireValue(doc.validateRange(range).isEqual(range)&&same(doc.getText(range))===same(text),'위치 확인 필요: 편집기 내용이 분석한 내용과 다릅니다. 파일을 저장하거나 인코딩을 확인한 뒤 다시 조회하세요.');
-    const shown=await vscode.window.showTextDocument(doc,{viewColumn:vscode.ViewColumn.One,selection:range});shown.setDecorations(this.decoration,[range]);
+    const {doc,range}=await this.openEngine(root,target);
     // A condition is a prerequisite, not a call or data relation: keep it 'manual' and record the needed truth value with the engine's reasons.
     const {relation,requiredTruth,uncertainty}=picked.candidate;
     await this.add(await this.capture(this.snapshotOf(doc,range)),relation==='execution_condition'?{type:'manual',uncertainty:[...uncertainty,`execution_requirement_${requiredTruth}`]}:{type:relation==='call'?'call':'data_dependency',uncertainty});
@@ -148,7 +178,8 @@ export class InvestigationController {
       const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 붙여넣으세요.');
       await service.addMany(picked.map(r=>({capture:manual(r.item.text),reason:r.label})),goal);vscode.window.setStatusBarMessage(`분기 조사: ${picked.length}개 단계를 추가했습니다.`,4000);});
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
-    command('traceRelated',async()=>this.related());
+    command('traceRelated',async()=>this.related());command('searchFunctions',async()=>this.searchFunctions());
+    const sources=vscode.workspace.createFileSystemWatcher('**/*.{c,h,C,H}'),stale=()=>this.analysisCache.clear();sources.onDidChange(stale);sources.onDidCreate(stale);sources.onDidDelete(stale);this.context.subscriptions.push(sources);
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
     command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
       const options={title:'조사 단계 검색 — 이유·목표·상태·위치·조건·코드',placeHolder:'입력한 글자가 든 단계만 남습니다. 상태 이름(조사 중·확인·보류·제외)으로도 거를 수 있습니다.',matchOnDescription:true,matchOnDetail:true};

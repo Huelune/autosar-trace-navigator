@@ -78,6 +78,12 @@
         "icon": "$(references)"
       },
       {
+        "command": "branchInvestigation.searchFunctions",
+        "title": "함수 검색 (분석 범위의 정의로 이동)",
+        "category": "분기 조사",
+        "icon": "$(symbol-method)"
+      },
+      {
         "command": "branchInvestigation.openStep",
         "title": "조사단계의 코드로 이동",
         "category": "분기 조사"
@@ -209,6 +215,11 @@
           "command": "branchInvestigation.addBulk",
           "when": "view == branchInvestigation.tree",
           "group": "1_add"
+        },
+        {
+          "command": "branchInvestigation.searchFunctions",
+          "when": "view == branchInvestigation.tree",
+          "group": "2_find"
         },
         {
           "command": "branchInvestigation.goParent",
