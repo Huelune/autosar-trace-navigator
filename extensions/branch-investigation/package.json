@@ -106,6 +106,12 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "branchInvestigation.searchSteps",
+        "title": "조사 단계 검색 (이유·목표·상태·조건)",
+        "category": "분기 조사",
+        "icon": "$(search)"
+      },
+      {
         "command": "branchInvestigation.repairAnchor",
         "title": "위치 재연결 (후보 찾기·선택 범위)",
         "category": "분기 조사"
@@ -207,6 +213,11 @@
           "command": "branchInvestigation.navigateForward",
           "when": "view == branchInvestigation.tree",
           "group": "navigation@5"
+        },
+        {
+          "command": "branchInvestigation.searchSteps",
+          "when": "view == branchInvestigation.tree",
+          "group": "navigation@0"
         }
       ],
       "view/item/context": [

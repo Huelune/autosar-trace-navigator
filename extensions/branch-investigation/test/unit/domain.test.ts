@@ -49,3 +49,10 @@ test('tree layout keeps a single path on one level and indents only where the in
 });
 test('selected code becomes a one-line reason default',async()=>{const {reasonFromCode}=await import('../../src/domain/model');
   assert.equal(reasonFromCode('  if (a < 60)\r\n\t  return 0;  \n'),'if (a < 60) return 0;');assert.equal(reasonFromCode('x'.repeat(300)).length,200);assert.equal(reasonFromCode(' \n '),'');});
+test('step search rows carry reason, status, goal, place, notes and code of every goal',async()=>{const {stepSearchItems}=await import('../../src/ui/stepSearch');
+  const {s,root}=await initial();const second=await s.add(capture(),'두 번째\n  이유');await s.edit(second,{...s.document.steps[1],status:'deferred',requiredConditions:'앞선 조건\n거짓',nextAction:'갱신 순서 확인'});
+  await s.createGoal({title:'다른 목표',description:''},capture());const other=await s.add({snippet:'return value;',contextBefore:'',contextAfter:''},'수동 메모');
+  const rows=stepSearchItems(s.document);assert.deepEqual(rows.map(r=>r.stepId),[root,second,other]);
+  assert.deepEqual(rows[1],{label:'2. 두 번째 이유',description:'보류 · 정상 경로 · a.c:3',detail:'필요 조건: 앞선 조건 거짓 | 다음 할 일: 갱신 순서 확인 | 코드: if (pedal >= 60u)',stepId:second});
+  assert.deepEqual([rows[0].description,rows[0].detail],['조사 중 · 정상 경로 · a.c:3','코드: if (pedal >= 60u)']);assert.equal(rows[2].description,'조사 중 · 다른 목표');
+  assert.equal(stepSearchItems(emptyDocument()).length,0);});
