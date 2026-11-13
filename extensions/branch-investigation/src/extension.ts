@@ -2,7 +2,7 @@ import * as vscode from 'vscode';
 import * as path from 'node:path';
 import * as fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
-import { CapturedCode, clone, CodeAnchor, InvestigationStep, statusLabels, Status } from './domain/model';
+import { CapturedCode, clone, CodeAnchor, InvestigationStep, reasonFromCode, statusLabels, Status } from './domain/model';
 import { InvestigationService, GoalInput, StepLink } from './domain/investigationService';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
@@ -49,9 +49,8 @@ export class InvestigationController {
   }
   private async goalInput():Promise<GoalInput|undefined>{const title=await this.prompts.input({title:'새 조사 목표',prompt:'목표 이름 (필수)',validateInput:v=>v.trim()&&v.length<=200?undefined:'목표 이름을 200자 이내로 입력하세요.'});if(!title?.trim()){return;}const description=await this.prompts.input({title:'목표 설명',prompt:'어떤 분기를 왜 통과하려고 하나요? (선택)',validateInput:v=>v.length<=65536?undefined:'설명이 너무 깁니다.'});return description===undefined?undefined:{title,description};}
   private async add(capture:CapturedCode,link?:StepLink):Promise<void>{const service=this.ready(),before=service.document;let goal:GoalInput|undefined;if(!before.currentGoalId){goal=await this.goalInput();if(!goal){return;}}
-    // Start from the parent step's reason: the next step usually continues the same line of thought, so the user rewrites it instead of retyping.
-    const inherited=before.steps.find(s=>s.id===before.currentStepId)?.reason.replace(/\s*\r?\n\s*/g,' ');
-    const reason=await this.prompts.input({title:'현재 조사에 추가',prompt:inherited?'이 코드를 선택한 이유 (필수) — 상위 단계의 이유를 가져왔습니다. 고쳐 쓰세요.':'이 코드를 선택한 이유 (필수)',value:inherited,validateInput:v=>v.trim()&&v.length<=65536?undefined:'이유를 입력하세요.'});if(!reason?.trim()){return;}
+    // Start from the selected code: the tree labels a step by its reason, so the code itself is what makes the step findable. The user may rewrite it.
+    const reason=await this.prompts.input({title:'현재 조사에 추가',prompt:'이 코드를 선택한 이유 (필수) — 선택한 코드를 채웠습니다. Enter로 그대로 저장하거나 고쳐 쓰세요.',value:reasonFromCode(capture.snippet),validateInput:v=>v.trim()&&v.length<=65536?undefined:'이유를 입력하세요.'});if(!reason?.trim()){return;}
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
     const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
   }

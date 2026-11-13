@@ -47,3 +47,5 @@ test('tree layout keeps a single path on one level and indents only where the in
   // Two first steps under one goal are both listed at the goal level.
   assert.deepEqual(shownChildren([step(1),step(2,1),step(3)],{kind:'goal',id:'g'}).map(s=>s.id),['s1','s2','s3']);
 });
+test('selected code becomes a one-line reason default',async()=>{const {reasonFromCode}=await import('../../src/domain/model');
+  assert.equal(reasonFromCode('  if (a < 60)\r\n\t  return 0;  \n'),'if (a < 60) return 0;');assert.equal(reasonFromCode('x'.repeat(300)).length,200);assert.equal(reasonFromCode(' \n '),'');});
