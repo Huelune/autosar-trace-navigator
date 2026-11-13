@@ -47,6 +47,17 @@ export async function run():Promise<void>{
       assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
     console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward / search visits the picked step only');
+    {// Bulk paste: every split piece is offered ticked; only what stays ticked becomes a sibling step under the current step, which stays current.
+      await command('openStep',writer);const counts=[service.document.steps.length,service.document.relations.length,service.document.revision];let shown:string[]=[];
+      const pasted='Rte_Read_Struct_State\r\nconsumer.c:3\r\n\r\nif (a < 60)\r\n\r\n  local = 1;\r\n  return local;';
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>pasted,pickMany:async items=>{shown=items.map(i=>`${i.label}|${i.description??''}|${i.picked}`);return undefined;}});await command('addBulk');
+      assert.deepEqual(shown,['함수명: Rte_Read_Struct_State||true','경로: consumer.c:3||true','조건식: if (a < 60)||true','코드: local = 1; return local;|2줄|true']);assert.deepEqual([service.document.steps.length,service.document.relations.length,service.document.revision],counts,'cancelled preview records nothing');
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>pasted,pickMany:async items=>items.filter(i=>!i.label.startsWith('경로'))});await command('addBulk');
+      const d2=service.document,made=d2.steps.slice(-3);assert.equal(d2.steps.length,counts[0]+3);assert.equal(d2.revision,counts[2]+1);assert.equal(d2.currentStepId,writer);assert.ok(made.every(m=>m.parentStepId===writer));
+      assert.deepEqual(made.map(m=>m.reason),['함수명: Rte_Read_Struct_State','조건식: if (a < 60)','코드: local = 1; return local;']);assert.equal(made[2].snippet,'  local = 1;\n  return local;');
+      await command('openStep',made[0].id);assert.equal(resolutionState(),'snippet_only');
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async()=>true});for(const m of made){await command('deleteStep',{kind:'step',id:m.id});}await command('openStep',writer);assert.equal(service.document.steps.length,counts[0]);
+      console.log('PASS Host: bulk paste previews split pieces / cancel records nothing / ticked pieces become sibling steps in one save');}
     {// Saving a step keeps the screen as it was: the code does not scroll and another sidebar tab (Search) is not replaced by the tree.
       const wait=()=>new Promise(r=>setTimeout(r,300));await fs.writeFile(path.join(root,'long.c'),Array.from({length:300},(_,i)=>`int line_${i};`).join('\n'));
       const far=await select('long.c','int line_205;');far.editor.revealRange(new vscode.Range(200,0,200,0),vscode.TextEditorRevealType.AtTop);await vscode.commands.executeCommand('workbench.view.search');await wait();

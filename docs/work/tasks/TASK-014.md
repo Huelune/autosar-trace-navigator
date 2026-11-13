@@ -35,5 +35,5 @@
 
 ## 인수인계 — 다음 첫 행동
 
-작업 브랜치에만 있다. main 반영은 사용자 요청으로 PR을 만든다.
+사용자 요청으로 [PR #7](https://github.com/Huelune/autosar-trace-navigator/pull/7)을 main에 병합했다(`224be4b`).
 피드백을 준 사람이 새 VSIX로 두 증상이 사라졌는지 확인해 주면 닫는다.

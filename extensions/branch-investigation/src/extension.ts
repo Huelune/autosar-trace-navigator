@@ -4,6 +4,7 @@ import * as fs from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 import { CapturedCode, clone, CodeAnchor, InvestigationStep, reasonFromCode, statusLabels, Status } from './domain/model';
 import { InvestigationService, GoalInput, StepLink } from './domain/investigationService';
+import { BULK_LIMIT, bulkKindLabel, splitBulk } from './domain/bulkPaste';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
@@ -14,7 +15,7 @@ import { snippetInput } from './ui/snippetInput';
 import { stepSearchItems } from './ui/stepSearch';
 import { PythonTraceAnalysisPort } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; confirm?(message:string):Thenable<boolean>; }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; }
 export interface AnalysisSettings { python:string; paths:string[] }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
@@ -137,6 +138,15 @@ export class InvestigationController {
     }));
     command('addSelection',async(_arg,snapshot)=>{this.ready();requireValue(snapshot,'선택한 코드가 없습니다. C/H 코드 범위를 선택하거나 수동 스니펫을 붙여넣으세요.');await this.add(await this.capture(snapshot));},true);
     command('createGoal',async(_arg,snapshot)=>{const service=this.ready(),capture=snapshot?await this.capture(snapshot):manual();const input=await this.goalInput();if(input){await service.createGoal(input,capture);}},true);
+    // Bulk paste: split and label by text shape, show every piece ticked, and create steps only for what the user leaves ticked.
+    command('addBulk',async()=>{const service=this.ready(),before=service.document,text=await this.prompts.snippet();if(!text?.trim()){return;}
+      const {items,truncated}=splitBulk(text);if(!items.length){return;}
+      const rows=items.map(i=>({label:`${bulkKindLabel[i.kind]}: ${reasonFromCode(i.text)}`,description:i.text.includes('\n')?`${i.text.split('\n').length}줄`:undefined,picked:true,item:i}));
+      const options={title:`${rows.length}개로 나눔${truncated?` (앞 ${BULK_LIMIT}개만)`:''} — 단계로 만들 항목만 남기고 확인`,placeHolder:'분류는 글자 모양으로만 붙인 이름표입니다. 파일·함수와 연결하지 않습니다.',matchOnDescription:true};
+      const picked=await (this.prompts.pickMany?this.prompts.pickMany(rows,options):vscode.window.showQuickPick(rows,{...options,canPickMany:true}));if(!picked?.length){return;}
+      let goal:GoalInput|undefined;if(!before.currentGoalId){goal=await this.goalInput();if(!goal){return;}}
+      const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 붙여넣으세요.');
+      await service.addMany(picked.map(r=>({capture:manual(r.item.text),reason:r.label})),goal);vscode.window.setStatusBarMessage(`분기 조사: ${picked.length}개 단계를 추가했습니다.`,4000);});
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.

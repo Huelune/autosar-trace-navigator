@@ -66,6 +66,12 @@
         "icon": "$(note)"
       },
       {
+        "command": "branchInvestigation.addBulk",
+        "title": "여러 항목 붙여넣기 (나눠서 단계로)",
+        "category": "분기 조사",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "branchInvestigation.traceRelated",
         "title": "관련 후보 조회 (값·조건·호출·RTE)",
         "category": "분기 조사",
@@ -198,6 +204,11 @@
           "command": "branchInvestigation.addSnippet",
           "when": "view == branchInvestigation.tree",
           "group": "navigation@2"
+        },
+        {
+          "command": "branchInvestigation.addBulk",
+          "when": "view == branchInvestigation.tree",
+          "group": "1_add"
         },
         {
           "command": "branchInvestigation.goParent",
