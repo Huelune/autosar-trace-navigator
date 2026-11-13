@@ -5,6 +5,7 @@ import { pathToFileURL } from 'node:url';
 import { CapturedCode, clone, CodeAnchor, InvestigationStep, reasonFromCode, statusLabels, Status } from './domain/model';
 import { InvestigationService, GoalInput, StepLink } from './domain/investigationService';
 import { BULK_LIMIT, bulkKindLabel, splitBulk } from './domain/bulkPaste';
+import { ExportFormat, exportFileName, exportFormats, exportGoal } from './ui/exporter';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
@@ -15,7 +16,7 @@ import { snippetInput } from './ui/snippetInput';
 import { stepSearchItems } from './ui/stepSearch';
 import { EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; save?(suggested:vscode.Uri):Thenable<vscode.Uri|undefined>; confirm?(message:string):Thenable<boolean>; }
 export interface AnalysisSettings { python:string; paths:string[] }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
@@ -177,6 +178,15 @@ export class InvestigationController {
       let goal:GoalInput|undefined;if(!before.currentGoalId){goal=await this.goalInput();if(!goal){return;}}
       const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 붙여넣으세요.');
       await service.addMany(picked.map(r=>({capture:manual(r.item.text),reason:r.label})),goal);vscode.window.setStatusBarMessage(`분기 조사: ${picked.length}개 단계를 추가했습니다.`,4000);});
+    // Export writes one goal to a file the user chooses. The notice names no path: it may be shown on a shared screen.
+    command('exportGoal',async arg=>{const service=this.ready(),d=service.document,fromTree=arg&&typeof arg==='object'&&(arg as TreeEntry).kind==='goal'?(arg as TreeEntry).id:undefined;
+      const goal=d.goals.find(g=>g.id===(fromTree??d.currentGoalId));requireValue(goal,'내보낼 목표가 없습니다. 트리에서 목표를 먼저 고르세요.');
+      const items=(Object.keys(exportFormats) as ExportFormat[]).map(format=>({label:exportFormats[format].label,detail:exportFormats[format].detail,format})),options={title:`"${goal.title.slice(0,60)}" 내보내기 — 형식을 고르세요`,matchOnDetail:true};
+      const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));if(!picked){return;}
+      const at=new Date(),suggested=vscode.Uri.file(path.join(this.root!,exportFileName(goal.title,picked.format,at.toISOString().slice(0,10))));
+      const target=await (this.prompts.save?this.prompts.save(suggested):vscode.window.showSaveDialog({defaultUri:suggested,title:'조사 기록 내보내기'}));if(!target){return;}
+      try{await vscode.workspace.fs.writeFile(target,Buffer.from(exportGoal(service.document,goal.id,picked.format,at.toLocaleString('ko-KR')),'utf8'));}catch{throw new Error('내보낸 파일을 쓰지 못했습니다. 저장 위치의 쓰기 권한과 파일이 열려 있는지 확인하세요.');}
+      void vscode.window.showInformationMessage('조사 기록을 내보냈습니다. 기록한 이유와 파일 경로가 들어 있으니 전달 전에 내용을 확인하세요.','열기').then(choice=>{if(choice){void (picked.format==='diagram'?vscode.env.openExternal(target):vscode.window.showTextDocument(target));}});},false);
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());command('searchFunctions',async()=>this.searchFunctions());
     const sources=vscode.workspace.createFileSystemWatcher('**/*.{c,h,C,H}'),stale=()=>this.analysisCache.clear();sources.onDidChange(stale);sources.onDidCreate(stale);sources.onDidDelete(stale);this.context.subscriptions.push(sources);

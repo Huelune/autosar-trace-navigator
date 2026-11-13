@@ -65,6 +65,15 @@ export async function run():Promise<void>{
       await command('openStep',made[0].id);assert.equal(resolutionState(),'snippet_only');
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async()=>true});for(const m of made){await command('deleteStep',{kind:'step',id:m.id});}await command('openStep',writer);assert.equal(service.document.steps.length,counts[0]);
       console.log('PASS Host: bulk paste previews split pieces / cancel records nothing / ticked pieces become sibling steps in one save');}
+    {// Export: the picked format is written to the chosen file only; cancelling either prompt writes nothing and the record is untouched.
+      const out=vscode.Uri.file(path.join(base,'export-out.md')),revision=service.document.revision;let offered:string[]=[],suggested='';const exists=()=>fs.access(out.fsPath).then(()=>true,()=>false);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{offered=items.map(i=>i.label);return undefined;},save:async()=>out});await command('exportGoal');assert.equal(offered.length,4);assert.equal(await exists(),false);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items[0],save:async()=>undefined});await command('exportGoal');assert.equal(await exists(),false);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items[0],save:async uri=>{suggested=path.basename(uri.fsPath);return out;}});await command('exportGoal');
+      const written=await fs.readFile(out.fsPath,'utf8');assert.match(suggested,/^조사-정상_경로_통과-\d{4}-\d{2}-\d{2}\.md$/);assert.ok(written.startsWith('# 조사 기록: 정상 경로 통과'));assert.ok(written.includes('Rte_Write_Struct_State(&built)'));assert.ok(!written.toLowerCase().includes(root.toLowerCase()),'no absolute path');
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items.find(i=>i.label.includes('HTML')),save:async()=>out});await command('exportGoal',{kind:'goal',id:service.document.currentGoalId});
+      assert.ok((await fs.readFile(out.fsPath,'utf8')).startsWith('<!DOCTYPE html>'));assert.equal(service.document.revision,revision);await fs.unlink(out.fsPath);
+      console.log('PASS Host: export offers four formats / cancel writes nothing / chosen file gets the goal only');}
     {// Saving a step keeps the screen as it was: the code does not scroll and another sidebar tab (Search) is not replaced by the tree.
       const wait=()=>new Promise(r=>setTimeout(r,300));await fs.writeFile(path.join(root,'long.c'),Array.from({length:300},(_,i)=>`int line_${i};`).join('\n'));
       const far=await select('long.c','int line_205;');far.editor.revealRange(new vscode.Range(200,0,200,0),vscode.TextEditorRevealType.AtTop);await vscode.commands.executeCommand('workbench.view.search');await wait();

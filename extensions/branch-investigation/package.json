@@ -135,6 +135,12 @@
         "icon": "$(trash)"
       },
       {
+        "command": "branchInvestigation.exportGoal",
+        "title": "목표 내보내기 (전달용 문서·시각화용 그림)",
+        "category": "분기 조사",
+        "icon": "$(export)"
+      },
+      {
         "command": "branchInvestigation.deleteGoal",
         "title": "목표 삭제 (단계 포함)",
         "category": "분기 조사",
@@ -222,6 +228,11 @@
           "group": "2_find"
         },
         {
+          "command": "branchInvestigation.exportGoal",
+          "when": "view == branchInvestigation.tree",
+          "group": "3_export"
+        },
+        {
           "command": "branchInvestigation.goParent",
           "when": "view == branchInvestigation.tree",
           "group": "navigation@3"
@@ -265,6 +276,11 @@
           "command": "branchInvestigation.deleteStep",
           "when": "view == branchInvestigation.tree && viewItem == step",
           "group": "z_delete"
+        },
+        {
+          "command": "branchInvestigation.exportGoal",
+          "when": "view == branchInvestigation.tree && viewItem == goal",
+          "group": "2_export"
         },
         {
           "command": "branchInvestigation.deleteGoal",
