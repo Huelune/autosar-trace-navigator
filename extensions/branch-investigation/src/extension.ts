@@ -53,7 +53,7 @@ export class InvestigationController {
     // Start from the selected code: the tree labels a step by its reason, so the code itself is what makes the step findable. The user may rewrite it.
     const reason=await this.prompts.input({title:'현재 조사에 추가',prompt:'이 코드를 선택한 이유 (필수) — 선택한 코드를 채웠습니다. Enter로 그대로 저장하거나 고쳐 쓰세요.',value:reasonFromCode(capture.snippet),validateInput:v=>v.trim()&&v.length<=65536?undefined:'이유를 입력하세요.'});if(!reason?.trim()){return;}
     const current=service.document;requireValue(current.currentGoalId===before.currentGoalId&&current.currentStepId===before.currentStepId,'입력 중 현재 조사가 바뀌었습니다. 다시 선택하세요.');
-    const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);await this.view?.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});
+    const stepId=await service.add(capture,reason,goal,link);await this.display(stepId,true,false);if(this.view?.visible){await this.view.reveal({kind:'step',id:stepId},{select:true,expand:true,focus:false});} // leave another sidebar tab (e.g. Search) in place
   }
   /**
    * Relink a step to the editor selection or to a same-file place where the saved snippet text occurs now.
@@ -86,7 +86,8 @@ export class InvestigationController {
       // Recheck the live buffer immediately before selecting; an unsaved edit must not be ignored.
       const checked=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());if(checked.state!=='verified'){this.lastResolution=checked;this.details.show(step,anchor,checked.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);return;}
       const r=new vscode.Range(checked.range.start.line,checked.range.start.character,checked.range.end.line,checked.range.end.character);
-      const editor=await vscode.window.showTextDocument(vscode.Uri.parse(checked.fileUri),{viewColumn:vscode.ViewColumn.One,selection:r,preserveFocus:false});editor.setDecorations(this.decoration,[r]);editor.revealRange(r,vscode.TextEditorRevealType.InCenterIfOutsideViewport);
+      const editor=await vscode.window.showTextDocument(vscode.Uri.parse(checked.fileUri),{viewColumn:vscode.ViewColumn.One,preserveFocus:false});editor.selection=new vscode.Selection(r.start,r.end);editor.setDecorations(this.decoration,[r]); // a selection passed as an open option re-centres the view even when the range is already visible
+      editor.revealRange(r,vscode.TextEditorRevealType.InCenterIfOutsideViewport);
     }
     if(record){await service.select(stepId,openSource&&resolved.state==='verified');}
   }

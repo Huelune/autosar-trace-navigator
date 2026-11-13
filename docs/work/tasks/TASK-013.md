@@ -36,5 +36,5 @@
 
 ## 인수인계 — 다음 첫 행동
 
-작업 브랜치에만 있다. main 반영은 사용자 요청으로 PR을 만든다.
+사용자 요청으로 [PR #6](https://github.com/Huelune/autosar-trace-navigator/pull/6)을 main에 병합했다(`43e2cde`).
 써 본 뒤 트리에서 상태별로 숨기는 기능이 필요하면 범위 밖 첫 항목을 새 카드로 승인받는다.

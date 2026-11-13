@@ -47,6 +47,15 @@ export async function run():Promise<void>{
       assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
     console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward / search visits the picked step only');
+    {// Saving a step keeps the screen as it was: the code does not scroll and another sidebar tab (Search) is not replaced by the tree.
+      const wait=()=>new Promise(r=>setTimeout(r,300));await fs.writeFile(path.join(root,'long.c'),Array.from({length:300},(_,i)=>`int line_${i};`).join('\n'));
+      const far=await select('long.c','int line_205;');far.editor.revealRange(new vscode.Range(200,0,200,0),vscode.TextEditorRevealType.AtTop);await vscode.commands.executeCommand('workbench.view.search');await wait();
+      const top=far.editor.visibleRanges[0].start.line;assert.ok(top>150,'scrolled before saving');assert.equal(app.view!.visible,false);
+      app.setPromptsForTests({input:async()=>'화면 유지 확인',snippet:async()=>undefined,confirm:async()=>true});await command('addSelection');await wait();const kept=service.document.currentStepId!;assert.notEqual(kept,writer);
+      assert.equal(vscode.window.activeTextEditor!.visibleRanges[0].start.line,top,'saving must not scroll the code');assert.equal(app.view!.visible,false,'saving must not switch the sidebar tab');
+      assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),'int line_205;');
+      await command('deleteStep',{kind:'step',id:kept});await command('openStep',writer);assert.equal(service.document.currentStepId,writer);
+      console.log('PASS Host: saving a step keeps the code scroll position and the open sidebar tab');}
     if(process.env.BRANCH_HOST_PYTHON){
       // The real engine process on the virtual workspace. Candidates are only offered; a pick plus a reason records a step.
       app.setAnalysisSettingsForTests(()=>({python:process.env.BRANCH_HOST_PYTHON!,paths:['.']}));await select('consumer.c','Rte_Read_Struct_State(&b)');
