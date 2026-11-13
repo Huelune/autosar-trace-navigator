@@ -11,6 +11,7 @@ import { AnchorCandidate, anchorCandidates, resolveAnchor, AnchorResolution } fr
 import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
+import { stepSearchItems } from './ui/stepSearch';
 import { PythonTraceAnalysisPort } from './adapters/traceAnalysisPort';
 
 export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; confirm?(message:string):Thenable<boolean>; }
@@ -137,6 +138,11 @@ export class InvestigationController {
     command('createGoal',async(_arg,snapshot)=>{const service=this.ready(),capture=snapshot?await this.capture(snapshot):manual();const input=await this.goalInput();if(input){await service.createGoal(input,capture);}},true);
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());
+    // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
+    command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
+      const options={title:'조사 단계 검색 — 이유·목표·상태·위치·조건·코드',placeHolder:'입력한 글자가 든 단계만 남습니다. 상태 이름(조사 중·확인·보류·제외)으로도 거를 수 있습니다.',matchOnDescription:true,matchOnDetail:true};
+      const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
+      if(picked){await this.display(picked.stepId,true,true);await this.view?.reveal({kind:'step',id:picked.stepId},{select:true,expand:true,focus:false});}});
     command('openStep',async arg=>this.display(this.stepId(arg),true,true));
     command('editStep',async arg=>this.display(this.stepId(arg),false,false,true));
     command('switchGoal',async arg=>{const service=this.ready();let target=typeof arg==='string'?arg:undefined;if(!target){target=(await vscode.window.showQuickPick(service.document.goals.map(g=>({label:g.title,id:g.id})),{title:'조사 목표 전환'}))?.id;}if(target){await service.switchGoal(target);}});

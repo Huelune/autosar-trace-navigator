@@ -40,7 +40,13 @@ export async function run():Promise<void>{
     await service.evidence(writer,{kind:'ct_observed',text:'사람이 가상 결과 확인',executionLabel:'CT-가상-01',observedAt:'2026-11-10T01:00:00.000Z',memo:'실제 CT 자동 실행 없음'});
     const count=[service.document.steps.length,service.document.relations.length];await command('navigateBack');await command('navigateForward');await command('openStep',writer);assert.deepEqual([service.document.steps.length,service.document.relations.length],count);
     assert.equal(resolutionState(),'verified');assert.equal(vscode.window.activeTextEditor!.document.uri.fsPath.toLowerCase(),path.join(root,'producer.c').toLowerCase());assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),'Rte_Write_Struct_State(&built)');
-    console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward');
+    {// Search lists every step; typing is the quick pick's own filter. Picking one visits it and creates nothing.
+      const counts=[service.document.steps.length,service.document.relations.length];let rows:{label:string;description?:string;detail?:string}[]=[];
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{rows=items;return items.find(i=>i.description?.startsWith('보류'));}});await command('openStep',reader);await command('searchSteps');
+      assert.equal(rows.length,counts[0]);const deferred=rows.filter(r=>r.description?.startsWith('보류'));assert.equal(deferred.length,1);assert.ok(deferred[0].description!.includes('정상 경로 통과')&&deferred[0].description!.includes('producer.c:'));assert.ok(deferred[0].detail!.includes('다음 할 일: 초기화와 갱신 순서 확인'));
+      assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
+    console.log('PASS Host: RTE manual investigation / deferred sibling / CT provenance / back-forward / search visits the picked step only');
     if(process.env.BRANCH_HOST_PYTHON){
       // The real engine process on the virtual workspace. Candidates are only offered; a pick plus a reason records a step.
       app.setAnalysisSettingsForTests(()=>({python:process.env.BRANCH_HOST_PYTHON!,paths:['.']}));await select('consumer.c','Rte_Read_Struct_State(&b)');
