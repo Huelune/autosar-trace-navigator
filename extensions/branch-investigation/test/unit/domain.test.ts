@@ -56,3 +56,12 @@ test('step search rows carry reason, status, goal, place, notes and code of ever
   assert.deepEqual(rows[1],{label:'2. 두 번째 이유',description:'보류 · 정상 경로 · a.c:3',detail:'필요 조건: 앞선 조건 거짓 | 다음 할 일: 갱신 순서 확인 | 코드: if (pedal >= 60u)',stepId:second});
   assert.deepEqual([rows[0].description,rows[0].detail],['조사 중 · 정상 경로 · a.c:3','코드: if (pedal >= 60u)']);assert.equal(rows[2].description,'조사 중 · 다른 목표');
   assert.equal(stepSearchItems(emptyDocument()).length,0);});
+test('bulk paste splits lists and blocks, labels by text shape, and adds siblings in one save',async()=>{const {splitBulk}=await import('../../src/domain/bulkPaste');
+  const text='Rte_Read_A\r\nsrc/app/secret_like.c:42\r\nFoo()\r\n\r\nif (a < 60 && p->ok)\r\n\r\n  x = a > b;\r\n  return x;\r\n\r\n\r\np->v >= 3\n\nvalue = 1;';
+  assert.deepEqual(splitBulk(text).items,[{kind:'function',text:'Rte_Read_A'},{kind:'path',text:'src/app/secret_like.c:42'},{kind:'function',text:'Foo()'},{kind:'condition',text:'if (a < 60 && p->ok)'},{kind:'code',text:'  x = a > b;\n  return x;'},{kind:'condition',text:'p->v >= 3'},{kind:'code',text:'value = 1;'}]);
+  assert.deepEqual(splitBulk(' \n\n').items,[]);assert.equal(splitBulk('p->v').items[0].kind,'code');
+  const many=splitBulk(Array.from({length:150},(_,i)=>`f${i}`).join('\n'));assert.equal(many.items.length,100);assert.equal(many.truncated,true);
+  const {s,root}=await initial(),rev=s.document.revision,ids=await s.addMany([{capture:{snippet:'Foo',contextBefore:'',contextAfter:''},reason:'함수명: Foo'},{capture:{snippet:'a < 1',contextBefore:'',contextAfter:''},reason:'조건식: a < 1'}]);
+  const d=s.document;assert.equal(d.revision,rev+1);assert.equal(d.currentStepId,root);assert.deepEqual(ids.map(i=>d.steps.find(x=>x.id===i)!.parentStepId),[root,root]);assert.deepEqual(ids.map(i=>d.steps.find(x=>x.id===i)!.sequence),[2,3]);
+  assert.equal(d.relations.filter(r=>r.fromStepId===root).length,2);assert.ok(ids.every(i=>d.anchors.find(a=>a.id===d.steps.find(x=>x.id===i)!.codeAnchorId)!.state==='snippet_only'));validate(d);
+  await assert.rejects(s.addMany([]));await assert.rejects(s.addMany([{capture:{snippet:'x',contextBefore:'',contextAfter:''},reason:' '}]));assert.equal(s.document.steps.length,d.steps.length);});
