@@ -38,5 +38,5 @@
 
 ## 인수인계 — 다음 첫 행동
 
-작업 브랜치에만 있다. main 반영은 사용자 요청으로 PR을 만든다.
+사용자 요청으로 [PR #9](https://github.com/Huelune/autosar-trace-navigator/pull/9)를 main에 병합했다(`c57524c`).
 실제 크기의 범위에서 첫 조회가 느리면 오래 떠 있는 엔진 프로세스를 새 카드로 검토한다.
