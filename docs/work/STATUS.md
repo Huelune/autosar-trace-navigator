@@ -82,6 +82,7 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-015](tasks/TASK-015.md) | 여러 항목 일괄 붙여넣기 분류·미리보기 후 단계화 | 완료, PR #8로 main 반영 |
 | [TASK-016](tasks/TASK-016.md) | 엔진 함수 검색과 조회 결과 재사용 | 완료, PR #9로 main 반영 |
 | [TASK-017](tasks/TASK-017.md) | P1 병합 후 현재 상태 정리 (문서만) | 완료 |
+| [TASK-018](tasks/TASK-018.md) | 트리에서 갈래마다 묶어 보이기 (사용 피드백) | 완료 (main 반영은 Git 이력으로 확인) |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
 TASK-016에서 Python 브리지도 바뀌었으므로 다른 PC는 VSIX와 엔진을 함께 새로 받아야 함수 검색이 동작한다.
