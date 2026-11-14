@@ -46,6 +46,7 @@ export async function run():Promise<void>{
       assert.equal(rows.length,counts[0]);const deferred=rows.filter(r=>r.description?.startsWith('보류'));assert.equal(deferred.length,1);assert.ok(deferred[0].description!.includes('정상 경로 통과')&&deferred[0].description!.includes('producer.c:'));assert.ok(deferred[0].detail!.includes('다음 할 일: 초기화와 갱신 순서 확인'));
       assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
+    await command('toggleTraceView');assert.equal(app.tree!.viewMode,'branches');
     {// Two routes from one step: the fork lists the first step of each route, and each first step says how long its route is and where the work is.
       const item=(id:string)=>app.tree!.getTreeItem({kind:'step',id}),text=(id:string)=>`${item(id).label}|${item(id).description}`;
       assert.deepEqual(app.tree!.getChildren({kind:'step',id:reader}).map(e=>e.id),[writer,sibling.id]);assert.match(text(writer),/^↳ .*\|▶ 보류 · 갈래 1단계$/);assert.match(text(sibling.id),/^↳ .*\|조사 중 · 갈래 1단계$/);
@@ -124,6 +125,29 @@ export async function run():Promise<void>{
       app.setPromptsForTests({input:async()=>'지울 목표의 단계',snippet:async()=>'임시 메모',confirm:async()=>true});await command('createGoal');const extra=service.document.currentGoalId!;assert.notEqual(extra,before.currentGoalId);
       await command('deleteGoal',{kind:'goal',id:extra});assert.ok(!service.document.goals.some(g=>g.id===extra));assert.equal(service.document.currentGoalId,undefined);await command('switchGoal',before.currentGoalId);await command('openStep',writer);
       console.log('PASS Host: delete asks first / declined keeps everything / step subtree and goal removed');}
+    // 40 successive investigations plus 19 alternatives: display depth stays bounded, and UI-only actions never edit the document.
+    {if(app.tree!.viewMode==='branches'){await command('toggleTraceView');}const originalGoal=service.document.currentGoalId!,originalStep=service.document.currentStepId!;
+      const lines=Array.from({length:40},(_,i)=>`int Trace_${i+1}(void) { return ${i+1}; }`),uri=vscode.Uri.file(path.join(root,'long-path.c'));
+      await vscode.workspace.fs.writeFile(uri,Buffer.from(lines.join('\n')+'\n'));
+      const captures=lines.map((snippet,line)=>({snippet,fileUri:uri.toString(),relativePath:'long-path.c',range:{start:{line,character:0},end:{line,character:snippet.length}},contextBefore:'',contextAfter:''}));
+      await service.createGoal({title:'40단계 목표 유지',description:'갈림길이 늘어도 폭을 넓히지 않는 가상 조사'},captures[0]);const longGoal=service.document.currentGoalId!,main:string[]=[],alternatives:string[]=[];
+      for(let i=0;i<40;i++){main.push(await service.add(captures[i],`입력 ${i+1}의 출처 확인`));if(i%2===1&&i<39){alternatives.push(await service.add({snippet:`alternative_${i+1}();`,contextBefore:'',contextAfter:''},'보류한 대체 경로'));await service.status(alternatives.at(-1)!,'deferred');await service.select(main.at(-1)!);}}
+      const all=service.document,sequence=all.steps.find(s=>s.id===main.at(-1))!.sequence;
+      const contextText=()=>app.view!.message??'';
+      assert.ok(contextText().includes('40단계 목표 유지'));assert.ok(contextText().includes('경로 40 / 전체 59단계'));assert.ok(contextText().includes('입력 40의 출처 확인'));
+      const depth=(entry:{kind:'step';id:string})=>{let n=0,p=app.tree!.getParent(entry);while(p){n++;assert.ok(n<=2,'view depth exceeds two levels');p=app.tree!.getParent(p);}return n;};
+      for(const id of main){depth({kind:'step',id});}assert.equal(app.tree!.getTreeItem({kind:'step',id:main.at(-1)!}).collapsibleState,vscode.TreeItemCollapsibleState.None);
+      const unchanged=JSON.stringify(service.document);await command('focusCurrentStep');assert.equal(JSON.stringify(service.document),unchanged);for(let i=0;i<20&&!app.view!.selection.some(e=>e.id===main.at(-1));i++){await new Promise(r=>setTimeout(r,100));}assert.ok(app.view!.selection.some(e=>e.id===main.at(-1)));
+      await command('toggleTraceView');assert.equal(app.tree!.viewMode,'branches');for(const id of alternatives){assert.ok(app.tree!.getParent({kind:'step',id}));}assert.equal(JSON.stringify(service.document),unchanged);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});await command('searchSteps');assert.equal(JSON.stringify(service.document),unchanged);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items.find(i=>i.description?.includes(' · 40단계 목표 유지')&&i.label.startsWith(`${all.steps.find(s=>s.id===alternatives[0])!.sequence}.`))});
+      await command('searchSteps');assert.equal(service.document.currentStepId,alternatives[0]);assert.equal(service.document.steps.length,all.steps.length);assert.equal(service.document.relations.length,all.relations.length);
+      await command('toggleTraceView');assert.equal(app.tree!.viewMode,'path');
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items.find(i=>i.description?.includes(' · 40단계 목표 유지')&&i.label.startsWith(`${sequence}.`))});await command('searchSteps');
+      assert.equal(service.document.currentStepId,main.at(-1));assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),lines[39]);
+      assert.ok(contextText().includes('경로 40 / 전체 59단계'));
+      await service.removeGoal(longGoal);await service.switchGoal(originalGoal);await command('openStep',originalStep);
+      console.log('PASS Host: 40-step path / 19 forks / shallow groups / fixed context / focus and view preserve records / alternate search');}
     const edited=await select('unicode.c','else return 1;');await edited.editor.edit(b=>b.insert(new vscode.Position(0,0),'// unsaved\r\n'));assert.equal(edited.doc.isDirty,true);await command('openStep',first.id);assert.equal(resolutionState(),'needs_review');assert.equal(service.document.steps[0].snippet,original.snippet);
     {// Anchor candidates: the unsaved line above moved the saved text one line down. It is offered, never applied without the confirmation.
       const stepOf=()=>service.document.steps.find(s=>s.id===first.id)!,oldAnchor=stepOf().codeAnchorId,goalBefore=JSON.stringify(stepOf().goalSnapshot);let offered:string[]=[];
