@@ -1,5 +1,11 @@
 # 프로젝트 현재 상태
 
+## 2026-11-14 과부하 검증
+
+[SCALE-003](tasks/SCALE-003.md): [실측 보고서](../verification/2026-11-14-overload.md). 엔진 13회·배포 어댑터 4항목·감독 단위 6개 통과.
+Windows 하위 프로세스를 포함한 자원 감시와 제한 동작을 확인했다. 실제 프로젝트 성능 보장은 아니다.
+로컬 브랜치 codex/analysis-overload-tests의 검사 도구 작업이며 제품 코드는 바꾸지 않았다.
+
 ## 2026-11-14 대형 샘플
 
 [SCALE-002](tasks/SCALE-002.md): [5125파일 가상 프로젝트](../../test/mega_autosar/README.md) 생성·분석·C 실행 검증.
