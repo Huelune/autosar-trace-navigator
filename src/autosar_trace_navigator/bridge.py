@@ -227,6 +227,60 @@ def functions(request: object) -> dict:
                           for item in found[:MAX_FUNCTIONS]]}
 
 
+
+def value_graph(request: object) -> dict:
+    """One analysis snapshot for a bounded recursive preview of one selected variable."""
+    if not isinstance(request, dict):
+        raise BridgeError("invalid_request")
+    root, file, line, character, includes = (request.get(k) for k in ("root", "file", "line", "character", "includePaths"))
+    trace = request.get("traceLimits", {})
+    ceilings = {"maxNodes": 2000, "maxDepth": 256, "maxSeconds": 30}
+    if (not isinstance(root, str) or not Path(root).is_absolute() or not isinstance(file, str)
+            or type(line) is not int or line < 0 or type(character) is not int or character < 0
+            or not isinstance(includes, list) or not all(isinstance(p, str) for p in includes)
+            or not isinstance(trace, dict) or set(trace) - ceilings.keys()
+            or any(type(v) is not int or not 1 <= v <= ceilings[k] for k, v in trace.items())):
+        raise BridgeError("invalid_request")
+    options = _scope_options(request)
+    try:
+        project = analyze_project(root, include_paths=includes, **options)
+        target = (project.root / file).resolve()
+    except AnalysisLimitError as error:
+        raise BridgeError("analysis_limit", {"metric": error.metric, "observedAtLeast": error.observed_at_least, "limit": error.limit}) from None
+    except (OSError, ValueError):
+        raise BridgeError("scope_not_readable") from None
+    sources = dict(project.sources)
+    if target not in sources:
+        raise BridgeError("file_not_in_scope")
+    site = _cursor(sources[target], target, line, character)
+    access = project.value_resolver.access_at(site) if site is not None else None
+    if access is None or not access.supported:
+        raise BridgeError("variable_not_supported")
+    owner = next(f for f in project.functions if f.location.path == target
+                 and f.location.start_byte <= site.start_byte < f.location.end_byte)
+    from .value_graph import trace_origins
+    graph = trace_origins(project, ValueProbe(owner.id, access.expression, access.location),
+                          max_nodes=trace.get("maxNodes", 1000), max_depth=trace.get("maxDepth", 256),
+                          max_seconds=trace.get("maxSeconds", 20))
+    nodes = []
+    for node in graph.nodes:
+        span = node.location
+        if node.kind == "probe" and node.expression == "$return":
+            span = _signature(sources, project.functions_by_id[node.function_id])
+        location = _location(project, sources, span)
+        if location["text"] is not None and len(location["text"]) > 2000:
+            location.update(text=None, startCharacter=None, endCharacter=None)
+        flags = _notes(project, node.uncertainty)
+        nodes.append({"id": node.id, "kind": node.kind[:100], "expression": node.expression[:1000],
+                      "functionName": project.functions_by_id[node.function_id].name[:1000],
+                      "location": location, "terminal": node.terminal, "requiredTruth": node.required_truth,
+                      "uncertainty": flags[:12], "detailsTruncated": len(flags) > 12 or len(node.expression) > 1000})
+    return {"ok": True, "variable": access.expression[:1000], "rootId": "n1", "nodes": nodes,
+            "edges": [{"from": a, "to": b, "relation": r, "cycle": (a, b, r) in graph.cycle_edges}
+                      for a, b, r in graph.edges],
+            "limitReasons": graph.limit_reasons, "truncated": bool(graph.limit_reasons)}
+
+
 def main() -> int:
     """Exit 0 for a result or a handled error code, 1 for an unexpected failure."""
     status = 0
@@ -239,7 +293,8 @@ def main() -> int:
         except ValueError:
             raise BridgeError("invalid_request") from None
         is_search = isinstance(request, dict) and request.get("op") == "functions"
-        response = functions(request) if is_search else related(request)
+        response = (value_graph(request) if isinstance(request, dict) and request.get("op") == "value_graph"
+                    else functions(request) if is_search else related(request))
     except BridgeError as error:
         response = {"ok": False, "error": error.args[0]}
         if error.limit_details is not None:

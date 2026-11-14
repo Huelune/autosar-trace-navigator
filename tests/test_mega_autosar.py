@@ -11,6 +11,7 @@ from unittest.mock import patch
 
 from c_build import run_c99
 from autosar_trace_navigator.workbench import AnalysisLimitError, analyze_project, function_candidates
+from autosar_trace_navigator import bridge
 
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -94,6 +95,18 @@ class MegaAutosarTests(unittest.TestCase):
         read = project.functions_by_name["Mega_000_Stage_39"][0]
         self.assertTrue(any(c.relation == "rte_data" and c.function and c.function.name == "Mega_000_Publish"
                             for c in function_candidates(project, read)))
+
+    def test_recursive_preview_crosses_all_40_stages_with_one_snapshot(self) -> None:
+        request = {"op": "value_graph", "root": str(self.root.resolve()), "file": "app/Mega_Goal.c",
+                   "line": 7, "character": 15, "includePaths": ["."], "limits": {"maxFiles": 6000}}
+        with patch.object(bridge, "analyze_project", return_value=self.project) as analyze:
+            graph = bridge.value_graph(request)
+        self.assertEqual(analyze.call_count, 1)
+        self.assertFalse(graph["truncated"], graph["limitReasons"])
+        self.assertTrue(any(n["terminal"] == "ct_input" and n["expression"] == "g_Stimulus_000"
+                            for n in graph["nodes"]))
+        owners = {n["functionName"] for n in graph["nodes"]}
+        self.assertTrue(all(f"Mega_000_Stage_{n:02}" in owners for n in range(40)))
 
     def test_active_chain_executes_9_boundary_condition_and_order_scenarios(self) -> None:
         component = self.root / "components/Mega_000"
