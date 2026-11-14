@@ -2,6 +2,7 @@
 
 이 문서는 include/src/support의 기존 소규모 샘플을 설명합니다.
 별도 [확장 프로젝트](large_autosar/README.md)는 C/H 171개·24 SWC로 구성됩니다.
+더 큰 [5,125파일 프로젝트](mega_autosar/README.md)는 64 SWC·40단계 호출·RTE 출력 인수·계산 분기를 생성합니다.
 루트 test/ 전체를 고르면 두 프로젝트와 오류 사례가 섞이므로 조사할 프로젝트·범위를 명시하세요.
 
 직접 작성한 AUTOSAR Classic 스타일 코드입니다. 실제 고객사 코드, 생성기 산출물,

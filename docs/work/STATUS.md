@@ -1,5 +1,11 @@
 # 프로젝트 현재 상태
 
+## 2026-11-14 대형 샘플
+
+[SCALE-002](tasks/SCALE-002.md): [5125파일 가상 프로젝트](../../test/mega_autosar/README.md) 생성·분석·C 실행 검증.
+새 브랜치 codex/mega-autosar-fixture의 독립 샘플 작업이며 main 반영 여부는 실제 Git 이력으로 확인한다.
+생성된 C/H는 build/에 있고 다른 PC는 생성기로 재현한다.
+
 ## 2026-11-14 통합 기록
 
 [INTEGRATE-001](tasks/INTEGRATE-001.md): 한도·제외 경로를 최신 함수 검색/캐시에 통합하고 현재 경로를 얕게 표시한다.
