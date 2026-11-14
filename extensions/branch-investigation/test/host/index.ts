@@ -107,6 +107,15 @@ export async function run():Promise<void>{
         await fs.writeFile(path.join(root,'added.c'),'void Host_AddedFunction(void)\n{\n}\n');for(let i=0;i<50&&app.analysisCache.size;i++){await wait(200);}assert.equal(app.analysisCache.size,0,'a changed source file drops kept results');
         app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{names=items.map(i=>i.label);return undefined;}});await command('searchFunctions');assert.equal(app.engineRuns,runs+2);assert.ok(names.includes('Host_AddedFunction'));
         console.log('PASS Host: function search lists scope definitions / kept list reused / source change re-reads / pick only navigates');}
+      {const unchanged=service.document.revision,base={python:process.env.BRANCH_HOST_PYTHON!,paths:['.']};let failure='',offers=0;
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,analysisFailure:async m=>{failure=m;return false;},pick:async items=>{offers++;return undefined;}});
+        app.setAnalysisSettingsForTests(()=>({...base,limits:{maxFiles:1,maxSourceBytes:33554432,maxFileBytes:4194304}}));
+        await select('consumer.c','Rte_Read_Struct_State(&b)');await command('traceRelated');assert.match(failure,/한도 초과/);assert.equal(offers,0);
+        failure='';await command('searchFunctions');assert.match(failure,/한도 초과/);assert.equal(offers,0,'cached default function list must not bypass the new budget');
+        app.setAnalysisSettingsForTests(()=>({...base,excludePaths:['unicode.c'],limits:{maxFiles:10,maxSourceBytes:33554432,maxFileBytes:4194304}}));
+        await command('traceRelated');await command('searchFunctions');assert.equal(offers,2);assert.equal(service.document.revision,unchanged,'failure and cancelled picks keep the investigation unchanged');
+        app.setAnalysisSettingsForTests(()=>base);
+        console.log('PASS Host: related and function budgets / exclusions / settings-aware cache / no partial step');}
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
     {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';

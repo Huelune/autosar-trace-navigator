@@ -299,7 +299,27 @@
           },
           "default": [],
           "scope": "window",
-          "markdownDescription": "관련 후보 조회 때 분석할 작업 폴더 기준 파일·폴더. 폴더 전체는 `.` 입니다. 파일 500개·32 MiB를 넘으면 조회를 거부합니다."
+          "markdownDescription": "관련 후보 조회 때 분석할 작업 폴더 기준 파일·폴더. 폴더 전체는 `.` 입니다. 현재 모듈·의존 헤더·공급자 폴더를 함께 선택하세요. 선택 범위 밖의 정의는 찾을 수 없습니다."
+        },
+        "branchInvestigation.analysisExcludePaths": {
+          "type": "array", "items": { "type": "string", "minLength": 1 }, "default": [], "scope": "window",
+          "markdownDescription": "분석에서 제외할 작업 폴더 기준 파일·폴더의 실제 경로. glob은 지원하지 않습니다. 생성 RTE 헤더나 공급자 코드를 제외하면 해당 후보도 찾을 수 없습니다."
+        },
+        "branchInvestigation.analysisMaxFiles": {
+          "type": "integer", "default": 500, "minimum": 1, "maximum": 10000, "scope": "window",
+          "markdownDescription": "한 번에 파싱할 C/H 파일 수 한도. 필요한 범위를 정한 뒤 PC 여건에 맞게 조정하세요. 10000개까지 설정하며, 초과 시 부분 결과를 반환하지 않습니다."
+        },
+        "branchInvestigation.analysisMaxSourceMiB": {
+          "type": "integer", "default": 32, "minimum": 1, "maximum": 256, "scope": "window",
+          "markdownDescription": "분석할 소스 합계 한도(MiB). 256 MiB까지 설정합니다. 구문 트리와 값 분석에는 원문보다 많은 메모리가 필요합니다."
+        },
+        "branchInvestigation.analysisMaxFileMiB": {
+          "type": "integer", "default": 4, "minimum": 1, "maximum": 16, "scope": "window",
+          "markdownDescription": "단일 C/H 파일 크기 한도(MiB). 16 MiB까지 설정하며 소스 합계 한도도 함께 적용됩니다."
+        },
+        "branchInvestigation.analysisTimeoutSeconds": {
+          "type": "integer", "default": 60, "minimum": 1, "maximum": 300, "scope": "window",
+          "markdownDescription": "분석 프로세스 제한 시간(초). 최대 300초. 조회마다 선택 범위를 새로 분석하며 알림에서 취소할 수 있습니다."
         }
       }
     }

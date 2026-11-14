@@ -93,6 +93,12 @@ class FunctionPage:
 class AnalysisLimitError(ValueError):
     """The chosen scope exceeds an explicit workload budget; no partial result returned."""
 
+    def __init__(self, message: str, *, metric: str, observed_at_least: int, limit: int) -> None:
+        super().__init__(message)
+        self.metric = metric
+        self.observed_at_least = observed_at_least
+        self.limit = limit
+
 
 @dataclass(frozen=True)
 class InvestigationCandidate:
@@ -117,7 +123,8 @@ def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = (
     includes = tuple(include_paths)
     sources = scan_sources(base, exclude_paths=exclude_paths, include_paths=includes)
     if len(sources) > max_files:
-        raise AnalysisLimitError(f"선택 범위에 파일 {len(sources)}개: 제한 {max_files}개. 분석 범위를 줄이세요.")
+        raise AnalysisLimitError(f"선택 범위에 파일 {len(sources)}개: 제한 {max_files}개. 분석 범위를 줄이세요.",
+                                 metric="files", observed_at_least=len(sources), limit=max_files)
     snapshots = []
     size = 0
     for source in sources:
@@ -125,7 +132,11 @@ def analyze_project(root: str | Path, *, exclude_paths: Iterable[str | Path] = (
         with source.path.open("rb") as stream:
             data = stream.read(remaining + 1)
         if len(data) > remaining:
-            raise AnalysisLimitError("선택 범위의 소스 크기 제한을 초과했습니다. 분석 범위를 줄이세요.")
+            file_limit = remaining == max_file_bytes
+            raise AnalysisLimitError("선택 범위의 소스 크기 제한을 초과했습니다. 분석 범위를 줄이세요.",
+                                     metric="file_bytes" if file_limit else "source_bytes",
+                                     observed_at_least=len(data) if file_limit else size + len(data),
+                                     limit=max_file_bytes if file_limit else max_source_bytes)
         size += len(data)
         snapshots.append((source.path, data))
     snapshots = tuple(snapshots)

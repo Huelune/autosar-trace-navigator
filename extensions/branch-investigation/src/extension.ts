@@ -13,10 +13,10 @@ import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
 import { stepSearchItems } from './ui/stepSearch';
-import { EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
+import { AnalysisError, AnalysisLimits, EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; }
-export interface AnalysisSettings { python:string; paths:string[] }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; analysisFailure?(message:string):Thenable<boolean>; }
+export interface AnalysisSettings { python:string; paths:string[]; excludePaths?:string[]; limits?:AnalysisLimits; timeoutSeconds?:number }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
 interface SelectionSnapshot { uri:string; version:number; range:vscode.Range; snippet:string; before:string; after:string; }
@@ -36,7 +36,14 @@ export class InvestigationController {
   private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service);this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();};this.updateStatus();}
   private updateStatus():void{this.status.text=this.service?.dirty?(this.service.error?'$(warning) 분기 조사: 저장 실패 · 재시도':'$(sync~spin) 분기 조사: 저장 중'):this.service?'$(list-tree) 분기 조사: 자동 저장':'$(warning) 분기 조사: 저장소 확인 필요';this.status.tooltip=this.service?.error??'조사 순번은 실제 실행 순서가 아닙니다.';}
   async initialize():Promise<void>{this.trusted();this.root=vscode.workspace.workspaceFolders![0].uri.fsPath;this.store??=new JsonStore(this.root);const document=await this.store.open();this.attach(new InvestigationService(document,this.store));if(document.currentStepId){await this.display(document.currentStepId,false);}}
-  async failed(error:unknown):Promise<void>{this.updateStatus();const action=await vscode.window.showErrorMessage(`분기 조사 작업 실패: ${error instanceof Error?error.message:'알 수 없는 오류'}`,this.service?.dirty?'저장 재시도':'복구 명령 확인');if(action==='저장 재시도'){void vscode.commands.executeCommand('branchInvestigation.retrySave');}}
+  async failed(error:unknown):Promise<void>{
+    this.updateStatus();
+    if(error instanceof AnalysisError && (error.code==='analysis_limit'||error.code==='timeout')){
+      const open=this.prompts.analysisFailure?await this.prompts.analysisFailure(error.message):await vscode.window.showErrorMessage(error.message,'분석 설정 열기')==='분석 설정 열기';
+      if(open){await vscode.commands.executeCommand('workbench.action.openSettings','@ext:huelune.branch-investigation analysis');}return;
+    }
+    const action=await vscode.window.showErrorMessage(`분기 조사 작업 실패: ${error instanceof Error?error.message:'알 수 없는 오류'}`,this.service?.dirty?'저장 재시도':'복구 명령 확인');if(action==='저장 재시도'){void vscode.commands.executeCommand('branchInvestigation.retrySave');}
+  }
   private snapshot():SelectionSnapshot|undefined{
     const editor=vscode.window.activeTextEditor;if(!editor||editor.selection.isEmpty){return undefined;}
     return this.snapshotOf(editor.document,new vscode.Range(editor.selection.start,editor.selection.end));
@@ -93,25 +100,26 @@ export class InvestigationController {
     if(record){await service.select(stepId,openSource&&resolved.state==='verified');}
   }
   /** Machine-scoped: a workspace file cannot choose which executable runs. Empty means the engine link is off. */
-  private analysisSettings=():AnalysisSettings=>{const c=vscode.workspace.getConfiguration('branchInvestigation');return {python:(c.get<string>('pythonPath')??'').trim(),paths:c.get<string[]>('analysisPaths')??[]};};
+  private analysisSettings=():AnalysisSettings=>{const c=vscode.workspace.getConfiguration('branchInvestigation');return {python:(c.get<string>('pythonPath')??'').trim(),paths:c.get<string[]>('analysisPaths')??[],excludePaths:c.get<string[]>('analysisExcludePaths')??[],limits:{maxFiles:c.get<number>('analysisMaxFiles')??500,maxSourceBytes:(c.get<number>('analysisMaxSourceMiB')??32)*1024*1024,maxFileBytes:(c.get<number>('analysisMaxFileMiB')??4)*1024*1024},timeoutSeconds:c.get<number>('analysisTimeoutSeconds')??60};};
   setAnalysisSettingsForTests(read:()=>AnalysisSettings):void{requireValue(this.context.extensionMode===vscode.ExtensionMode.Test,'분석 설정 교체는 Host 테스트에서만 허용합니다.');this.analysisSettings=read;}
   /** Engine candidates are only offered. Nothing is recorded until the user picks one and gives a reason. */
   private async related():Promise<void>{
     this.ready();const editor=vscode.window.activeTextEditor;
     requireValue(editor&&editor.document.uri.scheme==='file','C 파일의 함수 안에 커서를 두고 실행하세요.');
     requireValue(!editor.document.isDirty,'저장하지 않은 변경이 있습니다. 엔진은 디스크의 파일을 읽으므로 저장한 뒤 다시 조회하세요.');
-    const {python,paths,root}=await this.engine();
+    const {python,paths,root,excludePaths,limits,timeoutSeconds}=await this.engine();
     const file=path.relative(root,await sourcePath(this.root!,editor.document.uri.toString())).replaceAll('\\','/');
-    const request={root,file,line:editor.selection.start.line,character:editor.selection.start.character,includePaths:paths};
-    const result=await this.analysed('관련 후보 조회 중',['related',python,request],signal=>new PythonTraceAnalysisPort(python).related(request,signal));
+    const request={root,file,line:editor.selection.start.line,character:editor.selection.start.character,includePaths:paths,excludePaths,limits};
+    const result=await this.analysed('관련 후보 조회 중',['related',python,request],signal=>new PythonTraceAnalysisPort(python,undefined,timeoutSeconds*1000).related(request,signal));
     return this.offerRelated(root,result);
   }
   /** Settings of the engine link, or an error that says which setting to fill in. */
-  private async engine():Promise<{python:string;paths:string[];root:string}>{
-    const {python,paths}=this.analysisSettings();
+  private async engine():Promise<AnalysisSettings & {root:string;timeoutSeconds:number}>{
+    const {python,paths,excludePaths,limits,timeoutSeconds=60}=this.analysisSettings();
+    requireValue(Number.isInteger(timeoutSeconds)&&timeoutSeconds>=1&&timeoutSeconds<=300,'분석 제한 시간은 1~300초의 정수로 설정하세요.');
     requireValue(python,'Python 분석 연결이 꺼져 있습니다. 사용자 설정 branchInvestigation.pythonPath에 분석 엔진이 설치된 Python 실행 파일을 지정하세요.');
     requireValue(Array.isArray(paths)&&paths.length>0&&paths.every(p=>typeof p==='string'&&p.trim()),'분석 범위가 없습니다. 설정 branchInvestigation.analysisPaths에 작업 폴더 기준 경로를 지정하세요. 폴더 전체는 "." 입니다.');
-    return {python,paths,root:await fs.realpath(this.root!)};
+    return {python,paths,excludePaths,limits,timeoutSeconds,root:await fs.realpath(this.root!)};
   }
   /**
    * Engine results are kept until a C/H file of the workspace changes on disk, so repeating a lookup or a search does not re-parse the scope.
@@ -136,8 +144,8 @@ export class InvestigationController {
   }
   /** Function search: the list comes from the engine once and the quick pick filters it. Picking one only goes there and selects the signature. */
   private async searchFunctions():Promise<void>{
-    this.ready();const {python,paths,root}=await this.engine(),request={op:'functions' as const,root,includePaths:paths};
-    const result=await this.analysed('함수 목록 읽는 중',['functions',python,request],signal=>new PythonTraceAnalysisPort(python).functions(request,signal));
+    this.ready();const {python,paths,root,excludePaths,limits,timeoutSeconds}=await this.engine(),request={op:'functions' as const,root,includePaths:paths,excludePaths,limits};
+    const result=await this.analysed('함수 목록 읽는 중',['functions',python,request],signal=>new PythonTraceAnalysisPort(python,undefined,timeoutSeconds*1000).functions(request,signal));
     if(!result.functions.length){void vscode.window.showInformationMessage('분석 범위 안에서 함수 정의를 찾지 못했습니다. 범위 밖에 없다는 뜻은 아닙니다.');return;}
     const items=result.functions.map(f=>({label:f.name,description:`${f.signature.path}:${f.signature.startLine+1}`,entry:f}));
     const options={title:`함수 ${items.length}개${result.truncated?' (이름순 앞부분만, 분석 범위를 줄이세요)':''} — 분석 범위 안의 정의만 보여 줍니다. 범위 밖에 없다는 뜻은 아닙니다.`,placeHolder:'함수 이름이나 경로의 일부를 입력하세요.',matchOnDescription:true};
