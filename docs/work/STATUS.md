@@ -1,5 +1,12 @@
 # 프로젝트 현재 상태
 
+## 2026-11-14 변수 전체 출처 미리보기
+
+[TRACE-001](tasks/TRACE-001.md): 선택 변수에서 입력 경계까지 값·조건·호출·RTE 지원 후보를 연결하는 VS Code 미리보기.
+[검증 기록](../verification/2026-11-14-origin-preview.md): Python224·C225·Node46·개발/VSIX Host 3단계·패키지 감사 통과.
+5125파일 40단계 뒤 객체 입력 후보 도달, 513지점/718연결(한도 잘림 없음). 실제 CT/실행 가능 경로 확정은 아니다.
+로컬 codex/variable-origin-preview 브랜치의 2단계 커밋이며 원격 공유 상태는 실제 Git 이력으로 확인한다.
+
 ## 2026-11-14 과부하 검증
 
 [SCALE-003](tasks/SCALE-003.md): [실측 보고서](../verification/2026-11-14-overload.md). 엔진 13회·배포 어댑터 4항목·감독 단위 6개 통과.

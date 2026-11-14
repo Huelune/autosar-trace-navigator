@@ -164,6 +164,12 @@
         "command": "branchInvestigation.toggleTraceView",
         "title": "분기 조사: 현재 경로 / 전체 갈래 전환",
         "icon": "$(list-tree)"
+      },
+      {
+        "command": "branchInvestigation.previewOrigins",
+        "title": "변수 전체 출처 미리보기 (값·조건·RTE)",
+        "category": "분기 조사",
+        "icon": "$(type-hierarchy)"
       }
     ],
     "viewsContainers": {
@@ -208,6 +214,11 @@
           "command": "branchInvestigation.traceRelated",
           "when": "isWorkspaceTrusted && (editorLangId == c || editorLangId == cpp)",
           "group": "navigation@91"
+        },
+        {
+          "command": "branchInvestigation.previewOrigins",
+          "when": "isWorkspaceTrusted && (editorLangId == c || editorLangId == cpp)",
+          "group": "navigation@92"
         }
       ],
       "view/title": [
@@ -260,6 +271,11 @@
           "command": "branchInvestigation.toggleTraceView",
           "when": "view == branchInvestigation.tree",
           "group": "navigation@3"
+        },
+        {
+          "command": "branchInvestigation.previewOrigins",
+          "when": "view == branchInvestigation.tree",
+          "group": "2_find"
         }
       ],
       "view/item/context": [
@@ -362,6 +378,27 @@
           "maximum": 300,
           "scope": "window",
           "markdownDescription": "분석 프로세스 제한 시간(초). 최대 300초. 조회마다 선택 범위를 새로 분석하며 알림에서 취소할 수 있습니다."
+        },
+        "branchInvestigation.originMaxNodes": {
+          "type": "integer",
+          "default": 1000,
+          "minimum": 1,
+          "maximum": 2000,
+          "description": "전체 출처 미리보기의 최대 지점 수. 상한 도달은 미해결과 구분해 표시합니다."
+        },
+        "branchInvestigation.originMaxDepth": {
+          "type": "integer",
+          "default": 256,
+          "minimum": 1,
+          "maximum": 256,
+          "description": "변수·반환·조건을 포함한 탐색 깊이. 함수 하나에 여러 전달 단계가 있을 수 있습니다."
+        },
+        "branchInvestigation.originMaxSeconds": {
+          "type": "integer",
+          "default": 20,
+          "minimum": 1,
+          "maximum": 30,
+          "description": "파싱 후 출처 확장에 사용할 최대 초. 전체 분석 제한 시간도 적용됩니다."
         }
       }
     }

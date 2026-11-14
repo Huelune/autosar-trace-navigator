@@ -16,7 +16,12 @@ export interface RelatedResult { functionName: string | null; variable: string |
 export interface FunctionsRequest extends ScopeOptions { op: 'functions'; root: string; includePaths: string[] }
 export interface FunctionEntry { name: string; signature: EngineLocation }
 export interface FunctionsResult { functions: FunctionEntry[]; truncated: boolean }
-export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
+export interface ValueGraphRequest extends RelatedRequest { op: 'value_graph'; traceLimits?: {maxNodes:number;maxDepth:number;maxSeconds:number} }
+export type OriginTerminal = 'none'|'ct_input'|'constant'|'unresolved'|'review'|'cycle'|'limit';
+export interface OriginNode { id:string;kind:string;expression:string;functionName:string;location:EngineLocation;terminal:OriginTerminal;requiredTruth:boolean|null;uncertainty:string[];detailsTruncated:boolean }
+export interface OriginEdge { from:string;to:string;relation:'value'|'call'|'rte_data'|'condition';cycle:boolean }
+export interface ValueGraphResult { variable:string;rootId:string;nodes:OriginNode[];edges:OriginEdge[];limitReasons:string[];truncated:boolean }
+export interface TraceAnalysisPort { valueGraph(request:ValueGraphRequest,signal:AbortSignal):Promise<ValueGraphResult>; related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
 
 /** Kind and next action only. Engine or OS error text may contain paths and is never shown. */
 const messages = {
@@ -29,6 +34,7 @@ const messages = {
   analysis_limit: '분석 범위가 파일 수 또는 크기 한도를 넘었습니다. 분석 범위를 줄이세요.',
   scope_not_readable: '분석 범위를 읽지 못했습니다. 범위 설정이 작업 폴더 안의 실제 경로인지 확인하세요.',
   file_not_in_scope: '현재 파일이 분석 범위에 없습니다. 분석 범위 설정에 이 파일의 폴더를 추가하세요.',
+  variable_not_supported: '함수 안의 변수·구조체 멤버 위에 커서를 두세요. 배열·복합 포인터·인코딩 미확정 위치는 전체 출처를 조회할 수 없습니다.',
   internal: '분석 엔진 내부 오류입니다. 엔진 설치를 확인하세요.',
 } as const;
 export type AnalysisErrorCode = keyof typeof messages;
@@ -96,11 +102,38 @@ export function parseFunctions(raw: string): FunctionsResult {
   return { truncated: r.truncated, functions: r.functions.map((f: FunctionEntry) => { if (!text(f?.name, 1000) || !f.name) { throw new AnalysisError('invalid_response'); } return { name: f.name, signature: location(f.signature) }; }) };
 }
 
+
+/** Bound the graph and reject every invalid edge/location before the UI sees it. */
+export function parseValueGraph(raw:string):ValueGraphResult {
+  let r:ValueGraphResult & {ok?:unknown;error?:unknown;limitDetails?:unknown};
+  try{r=JSON.parse(raw);}catch{throw new AnalysisError('invalid_response');}
+  if(r?.ok===false){const code=typeof r.error==='string'&&Object.hasOwn(messages,r.error)?r.error as AnalysisErrorCode:'internal';throw new AnalysisError(code,code==='analysis_limit'?limitDetails(r.limitDetails):undefined);}
+  const fail=()=>{throw new AnalysisError('invalid_response');};
+  const id=(v:unknown):v is string=>typeof v==='string'&&/^n[1-9][0-9]{0,3}$/.test(v);
+  if(r?.ok!==true||!text(r.variable,1000)||!r.variable||r.rootId!=='n1'||!Array.isArray(r.nodes)||r.nodes.length<1||r.nodes.length>2000||!Array.isArray(r.edges)||r.edges.length>8000||typeof r.truncated!=='boolean'||!Array.isArray(r.limitReasons)||r.limitReasons.length>5||!r.limitReasons.every(v=>['nodes','depth','time','sources','edges'].includes(v))||new Set(r.limitReasons).size!==r.limitReasons.length||r.truncated!==(r.limitReasons.length>0)){return fail();}
+  const ids=new Set<string>(),terminals=['none','ct_input','constant','unresolved','review','cycle','limit'];
+  const nodes=r.nodes.map(n=>{
+    if(!id(n?.id)||ids.has(n.id)||!text(n.kind,100)||!text(n.expression,1000)||!text(n.functionName,1000)||!terminals.includes(n.terminal)||typeof n.detailsTruncated!=='boolean'||(n.kind==='condition'?typeof n.requiredTruth!=='boolean':n.requiredTruth!==null)||!Array.isArray(n.uncertainty)||n.uncertainty.length>12||!n.uncertainty.every(v=>text(v,200))){return fail();}
+    ids.add(n.id);return {...n,location:location(n.location),uncertainty:[...n.uncertainty]};
+  });
+  if(nodes[0].id!==r.rootId||nodes[0].kind!=='probe'||nodes[0].expression!==r.variable){return fail();}
+  const seen=new Set<string>(),next=new Map<string,string[]>();
+  const edges=r.edges.map(e=>{
+    const key=JSON.stringify([e?.from,e?.to,e?.relation]);
+    if(!ids.has(e?.from)||!ids.has(e?.to)||!['value','call','rte_data','condition'].includes(e?.relation)||typeof e?.cycle!=='boolean'||seen.has(key)){return fail();}
+    seen.add(key);next.set(e.from,[...(next.get(e.from)??[]),e.to]);return {from:e.from,to:e.to,relation:e.relation,cycle:e.cycle};
+  });
+  const reachable=new Set([r.rootId]),queue=[r.rootId];for(let i=0;i<queue.length;i++){for(const child of next.get(queue[i])??[]){if(!reachable.has(child)){reachable.add(child);queue.push(child);}}}
+  if(reachable.size!==ids.size){return fail();}
+  return {variable:r.variable,rootId:r.rootId,nodes,edges,limitReasons:[...r.limitReasons],truncated:r.truncated};
+}
+
 /** One short-lived local process per request: no shell, no network, stderr discarded. */
 export class PythonTraceAnalysisPort implements TraceAnalysisPort {
   // ponytail: every request re-parses the scope; the caller keeps results until a source file changes. Switch to a long-lived process with a cached snapshot if a first request is measurably slow.
   constructor(private readonly python: string, private readonly args: readonly string[] = ['-I', '-m', 'autosar_trace_navigator.bridge'],
     private readonly timeoutMs = 60000, private readonly maxOutputBytes = 8 * 1024 * 1024) {}
+  valueGraph(request:ValueGraphRequest,signal:AbortSignal):Promise<ValueGraphResult>{return this.run(request,signal,parseValueGraph);}
   related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> { return this.run(request, signal, parseRelated); }
   functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> { return this.run(request, signal, parseFunctions); }
   private run<T>(request: object, signal: AbortSignal, parse: (raw: string) => T): Promise<T> {

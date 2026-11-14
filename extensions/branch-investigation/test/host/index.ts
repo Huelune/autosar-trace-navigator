@@ -117,6 +117,24 @@ export async function run():Promise<void>{
         await command('traceRelated');await command('searchFunctions');assert.equal(offers,2);assert.equal(service.document.revision,unchanged,'failure and cancelled picks keep the investigation unchanged');
         app.setAnalysisSettingsForTests(()=>base);
         console.log('PASS Host: related and function budgets / exclusions / settings-aware cache / no partial step');}
+      {const originalStep=service.document.currentStepId!,before=JSON.stringify(service.document);await select('consumer.c','a >=');
+        const runs=app.engineRuns;await command('previewOrigins');const graph=app.origins.result!;
+        assert.ok(app.origins.isOpen);assert.equal(graph.variable,'a');assert.equal(JSON.stringify(service.document),before,'preview must never save investigation records');
+        const input=graph.nodes.find(n=>n.terminal==='ct_input'&&n.expression==='Struct_RawInput')!;assert.ok(input,'member/RTE path reaches global input candidate');
+        assert.ok(graph.edges.some(e=>e.relation==='rte_data'));await command('previewOrigins');assert.equal(app.engineRuns,runs+1,'same graph reuses the query result');
+        await app.originAction('open',input.id);assert.equal(JSON.stringify(service.document),before);assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),input.location.text);
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined});await app.originAction('add',input.id);assert.equal(JSON.stringify(service.document),before,'cancelled reason saves no step');
+        app.setPromptsForTests({input:async()=>{const editor=vscode.window.activeTextEditor!;await editor.edit(b=>b.insert(new vscode.Position(0,0),'// prompt edit\n'));await vscode.commands.executeCommand('undo');return 'stale input';},snippet:async()=>undefined});
+        await assert.rejects(()=>app.originAction('add',input.id),/소스가 변경/);assert.equal(JSON.stringify(service.document),before,'editing while the reason prompt is open must not save stale code');
+        await command('goParent');const moved=JSON.stringify(service.document);await assert.rejects(()=>app.originAction('add',input.id),/현재 조사가/);assert.equal(JSON.stringify(service.document),moved);await command('openStep',originalStep);
+        const quiet=service.document;app.setPromptsForTests({input:async()=>'전체 출처에서 전역 입력 후보를 골라 조사',snippet:async()=>undefined});await app.originAction('add',input.id);
+        const added=service.document.steps.find(n=>n.id===service.document.currentStepId)!;assert.equal(added.parentStepId,originalStep);assert.equal(service.document.steps.length,quiet.steps.length+1);assert.equal(added.status,'investigating');
+        assert.ok(service.document.relations.find(e=>e.toStepId===added.id)!.uncertainty.includes('automatic_origin_preview_candidate'));assert.equal(app.origins.valid,false);
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,confirm:async()=>true});await command('deleteStep',added.id);await command('openStep',originalStep);
+        await select('consumer.c','a >=');await command('previewOrigins');const unchanged=JSON.stringify(service.document),touch=path.join(root,'origin-invalidation.c');await fs.writeFile(touch,'void Origin_Invalidate(void) {}\n');
+        for(let i=0;i<40&&app.origins.valid;i++){await new Promise(r=>setTimeout(r,50));}assert.equal(app.origins.valid,false);await assert.rejects(()=>app.originAction('open',input.id),/오래됐/);assert.equal(JSON.stringify(service.document),unchanged);
+        await fs.unlink(touch);app.origins.dispose();await command('openStep',originalStep);
+        console.log('PASS Host: recursive value/guard/member/RTE preview / cache / source navigation / no automatic history / explicit add / stale source and goal rejected');}
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
     {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';
