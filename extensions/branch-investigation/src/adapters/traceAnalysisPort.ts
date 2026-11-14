@@ -18,7 +18,7 @@ export interface FunctionEntry { name: string; signature: EngineLocation }
 export interface FunctionsResult { functions: FunctionEntry[]; truncated: boolean }
 export interface ValueGraphRequest extends RelatedRequest { op: 'value_graph'; traceLimits?: {maxNodes:number;maxDepth:number;maxSeconds:number} }
 export type OriginTerminal = 'none'|'ct_input'|'constant'|'unresolved'|'review'|'cycle'|'limit';
-export interface OriginNode { id:string;kind:string;expression:string;functionName:string;location:EngineLocation;terminal:OriginTerminal;requiredTruth:boolean|null;uncertainty:string[];detailsTruncated:boolean }
+export interface OriginNode { id:string;kind:string;expression:string;functionName:string;location:EngineLocation;terminal:OriginTerminal;requiredTruth:boolean|null;uncertainty:string[];detailsTruncated:boolean;siteFunctionName?:string|null;context?:{startLine:number;text:string}|null }
 export interface OriginEdge { from:string;to:string;relation:'value'|'call'|'rte_data'|'condition';cycle:boolean }
 export interface ValueGraphResult { variable:string;rootId:string;nodes:OriginNode[];edges:OriginEdge[];limitReasons:string[];truncated:boolean }
 export interface TraceAnalysisPort { valueGraph(request:ValueGraphRequest,signal:AbortSignal):Promise<ValueGraphResult>; related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
@@ -114,7 +114,10 @@ export function parseValueGraph(raw:string):ValueGraphResult {
   const ids=new Set<string>(),terminals=['none','ct_input','constant','unresolved','review','cycle','limit'];
   const nodes=r.nodes.map(n=>{
     if(!id(n?.id)||ids.has(n.id)||!text(n.kind,100)||!text(n.expression,1000)||!text(n.functionName,1000)||!terminals.includes(n.terminal)||typeof n.detailsTruncated!=='boolean'||(n.kind==='condition'?typeof n.requiredTruth!=='boolean':n.requiredTruth!==null)||!Array.isArray(n.uncertainty)||n.uncertainty.length>12||!n.uncertainty.every(v=>text(v,200))){return fail();}
-    ids.add(n.id);return {...n,location:location(n.location),uncertainty:[...n.uncertainty]};
+    if(n.siteFunctionName!==undefined&&n.siteFunctionName!==null&&!text(n.siteFunctionName,1000)){return fail();}
+    const place=location(n.location);
+    if(n.context!==undefined&&n.context!==null&&(!count(n.context.startLine)||!text(n.context.text,4000)||n.context.startLine>place.startLine)){return fail();}
+    ids.add(n.id);return {...n,location:place,uncertainty:[...n.uncertainty],...(n.context?{context:{startLine:n.context.startLine,text:n.context.text}}:{})};
   });
   if(nodes[0].id!==r.rootId||nodes[0].kind!=='probe'||nodes[0].expression!==r.variable){return fail();}
   const seen=new Set<string>(),next=new Map<string,string[]>();

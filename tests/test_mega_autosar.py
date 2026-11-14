@@ -103,6 +103,8 @@ class MegaAutosarTests(unittest.TestCase):
             graph = bridge.value_graph(request)
         self.assertEqual(analyze.call_count, 1)
         self.assertFalse(graph["truncated"], graph["limitReasons"])
+        # Unknown typedef casts are deliberately not guessed as supported arithmetic.
+        self.assertTrue(any(n["terminal"] == "unresolved" and "(uint16)" in n["expression"] for n in graph["nodes"]))
         self.assertTrue(any(n["terminal"] == "ct_input" and n["expression"] == "g_Stimulus_000"
                             for n in graph["nodes"]))
         owners = {n["functionName"] for n in graph["nodes"]}

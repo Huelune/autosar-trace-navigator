@@ -263,6 +263,10 @@ def value_graph(request: object) -> dict:
                           max_nodes=trace.get("maxNodes", 1000), max_depth=trace.get("maxDepth", 256),
                           max_seconds=trace.get("maxSeconds", 20))
     nodes = []
+    context_lines: dict[Path, list[bytes]] = {}
+    owners_by_path: dict[Path, list[FunctionDefinition]] = {}
+    for function in project.functions:
+        owners_by_path.setdefault(function.location.path, []).append(function)
     for node in graph.nodes:
         span = node.location
         if node.kind == "probe" and node.expression == "$return":
@@ -271,10 +275,27 @@ def value_graph(request: object) -> dict:
         if location["text"] is not None and len(location["text"]) > 2000:
             location.update(text=None, startCharacter=None, endCharacter=None)
         flags = _notes(project, node.uncertainty)
+        # Display-only context. Navigation and saved anchors still use the exact original span.
+        lines = context_lines.setdefault(span.path, [])
+        if not lines:
+            lines.extend(sources[span.path].split(b'\n'))
+        first = max(0, span.start_line - 3)
+        last = min(len(lines), max(span.start_line + 2, min(span.end_line + 2, first + 9)))
+        try:
+            window = lines[first:last]
+            preview = b"\n".join(window).decode("utf-8") if sum(map(len, window)) <= 8000 else None
+            context = {"startLine": first, "text": preview} if preview is not None and len(preview) <= 2000 else None
+        except UnicodeDecodeError:
+            context = None
+        containing = [f for f in owners_by_path.get(span.path, ())
+                      if f.location.start_byte <= span.start_byte < f.location.end_byte]
+        site_owner = min(containing, key=lambda f: f.location.end_byte - f.location.start_byte) if containing else None
         nodes.append({"id": node.id, "kind": node.kind[:100], "expression": node.expression[:1000],
                       "functionName": project.functions_by_id[node.function_id].name[:1000],
+                      "siteFunctionName": site_owner.name[:1000] if site_owner else None,
                       "location": location, "terminal": node.terminal, "requiredTruth": node.required_truth,
-                      "uncertainty": flags[:12], "detailsTruncated": len(flags) > 12 or len(node.expression) > 1000})
+                      "uncertainty": flags[:12], "detailsTruncated": len(flags) > 12 or len(node.expression) > 1000,
+                      "context": context})
     return {"ok": True, "variable": access.expression[:1000], "rootId": "n1", "nodes": nodes,
             "edges": [{"from": a, "to": b, "relation": r, "cycle": (a, b, r) in graph.cycle_edges}
                       for a, b, r in graph.edges],

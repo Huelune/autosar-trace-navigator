@@ -18,7 +18,7 @@ test('graph parser retains bounded candidates and rejects unsafe or malformed gr
     {...reply,nodes:[root,{...input,location:{...location,path:'C:/outside.c'}}]},
     {...reply,nodes:[root,{...input,requiredTruth:true}]}, {...reply,nodes:[root,{...input,kind:'condition',requiredTruth:null}]},
     {...reply,truncated:true}, {...reply,limitReasons:['unknown'],truncated:true},
-    {...reply,nodes:[root,{...input,terminal:'verified_ct'}]}, {...reply,nodes:[root,{...input,uncertainty:[4]}]},
+    {...reply,nodes:[root,{...input,terminal:'verified_ct'}]}, {...reply,nodes:[root,{...input,uncertainty:[4]}]}, {...reply,nodes:[root,{...input,context:{startLine:-1,text:'bad'}}]}, {...reply,nodes:[root,{...input,context:{startLine:50,text:'bad'}}]},
     {...reply,nodes:Array.from({length:2001},(_,i)=>({...root,id:`n${i+1}`}))}];
   for(const value of malformed){assert.throws(()=>parse(value),(e:AnalysisError)=>e.code==='invalid_response');}
 });
@@ -40,18 +40,18 @@ test('graph request carries scope and trace limits over the existing isolated pr
 test('flat view renders shared references and escapes every source-derived field',()=>{
   const graph=parse(reply);graph.nodes[1].expression='<img src=x onerror=run()>';graph.nodes[1].location.text='</pre><script>run()</script>';
   const page=graphPage(graph,'<script>goal()</script>','fixed-token');
-  assert.ok(page.includes('href="#n2"'));assert.ok(page.includes('전역 입력 후보'));assert.ok(page.includes('src/input.c:4'));
+  assert.ok(page.includes('data-id="n2"'));assert.ok(page.includes('전역 입력 후보'));assert.ok(page.includes('src/input.c:4'));
   assert.ok(page.includes('&lt;img'));assert.ok(!page.includes('<img'));assert.ok(!page.includes('<script>run()'));
   assert.ok(page.includes('&lt;script&gt;goal()'));assert.ok(page.includes('nonce-fixed-token'));
   assert.ok(graphPage(graph,'목표','fixed-token','소스 변경됨').includes(' disabled'));
 });
 
-test('2000-deep candidate chain and cyclic references render as 2000 flat cards',()=>{
+test('2000-deep candidate chain and cyclic references render with one focused code panel',()=>{
   const nodes=Array.from({length:2000},(_,i)=>({...root,id:`n${i+1}`,expression:i?`value_${i}`:'pedal'}));
   const edges=Array.from({length:1999},(_,i)=>({from:`n${i+1}`,to:`n${i+2}`,relation:'value',cycle:false}));
   edges.push({from:'n2000',to:'n1000',relation:'condition',cycle:true});
   const graph=parse({...reply,nodes,edges}),page=graphPage(graph,'목표','fixed-token');
-  assert.equal((page.match(/<article /g)??[]).length,2000);assert.ok(page.includes('순환 참조'));
+  assert.equal((page.split('<script nonce=')[0].match(/id="focus-code"/g)??[]).length,1);assert.equal((page.match(/<article /g)??[]).length,0);assert.ok(page.includes('전체 후보 2000'));
 });
 
 test('preview message allowlist rejects stale tokens, foreign node IDs and arbitrary commands',()=>{

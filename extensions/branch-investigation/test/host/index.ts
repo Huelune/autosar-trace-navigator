@@ -4,6 +4,7 @@ import * as path from 'node:path';
 import * as vscode from 'vscode';
 import type { InvestigationController } from '../../src/extension';
 import { decodeDetailMessage } from '../../src/ui/detailsPanel';
+import {createOriginFlow} from '../../src/ui/valueGraphFlow';
 
 export async function run():Promise<void>{
   const phase=process.env.BRANCH_HOST_PHASE!,base=process.env.BRANCH_HOST_BASE!,root=vscode.workspace.workspaceFolders![0].uri.fsPath;
@@ -135,6 +136,16 @@ export async function run():Promise<void>{
         for(let i=0;i<40&&app.origins.valid;i++){await new Promise(r=>setTimeout(r,50));}assert.equal(app.origins.valid,false);await assert.rejects(()=>app.originAction('open',input.id),/오래됐/);assert.equal(JSON.stringify(service.document),unchanged);
         await fs.unlink(touch);app.origins.dispose();await command('openStep',originalStep);
         console.log('PASS Host: recursive value/guard/member/RTE preview / cache / source navigation / no automatic history / explicit add / stale source and goal rejected');}
+      {app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,reportError:async e=>{throw e;}});await new Promise(r=>setTimeout(r,300));const quiet=JSON.stringify(service.document);await select('Callers.c','pedal >=');await command('previewOrigins');
+        const graph=app.origins.result!,model=createOriginFlow(graph),input=graph.nodes.find(n=>n.terminal==='ct_input'&&n.expression==='Caller_Raw'&&n.functionName==='Caller_Run')!;
+        assert.ok(input);assert.ok(!model.endpoints.some(n=>n.expression==='Caller_Enable'),'condition input must not be shown as a value supplier');
+        const route=model.navigate(model.initial(),'target',input.id);assert.ok(route.route.some(id=>model.nodes.get(id)!.functionName==='Caller_Relay'));
+        assert.ok(route.route.some(id=>model.nodes.get(id)!.functionName==='Caller_Run'));assert.ok(model.conditions(route.route).some(c=>c.node.expression.includes('Caller_Enable')));
+        assert.ok(graph.nodes[0].context!.text.includes('pedal >= 60u'));assert.equal(JSON.stringify(service.document),quiet);
+        const returned=graph.nodes.find(n=>n.kind==='return_value'&&n.expression==='Caller_GetRaw()')!;assert.equal(returned.siteFunctionName,'Caller_FromFunction');
+        const argument=graph.nodes.find(n=>n.kind==='parameter_input'&&n.expression==='command')!;await app.originAction('open',argument.id);
+        assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),'Caller_Check(999u, command)');assert.equal(JSON.stringify(service.document),quiet);
+        app.origins.dispose();console.log('PASS Host: parameter-to-caller routes / argument position / separate value and guard inputs / one-code context / no history writes');}
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
     {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';

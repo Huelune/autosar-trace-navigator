@@ -15,6 +15,7 @@ const { Writable } = require('node:stream');
   for (const name of ['consumer.c', 'producer.c', 'struct_paths.h', 'Rte_StructPaths.h']) {
     await fs.copyFile(path.join(repo, 'test/struct_paths', name), path.join(workspace, name));
   }
+  for(const name of ['Callers.c','Callers.h']){await fs.copyFile(path.join(repo,'test/caller_paths',name),path.join(workspace,name));}
   await fs.writeFile(path.join(workspace, 'unicode.c'), 'int Demo(int a) {\r\n  /*한글 😀*/ if (a < 60) return 0;\r\n  else return 1;\r\n}\r\n');
   await fs.mkdir(path.join(workspace, '.vscode'));
   await fs.writeFile(path.join(workspace, '.vscode/settings.json'), JSON.stringify({'telemetry.telemetryLevel':'off','update.mode':'none','extensions.autoUpdate':false,'extensions.autoCheckUpdates':false,'workbench.startupEditor':'none','security.workspace.trust.startupPrompt':'never'}));

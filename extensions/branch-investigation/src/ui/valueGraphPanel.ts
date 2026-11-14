@@ -16,7 +16,7 @@ export class ValueGraphPanel implements vscode.Disposable{
   show(graph:ValueGraphResult,goal:string):void{
     if(!this.panel){
       this.panel=vscode.window.createWebviewPanel('branchInvestigation.origins','변수 전체 출처',vscode.ViewColumn.Beside,{enableScripts:true,localResourceRoots:[],retainContextWhenHidden:true});
-      this.panel.onDidDispose(()=>{this.panel=undefined;this.current=undefined;});
+      const opened=this.panel;opened.onDidDispose(()=>{if(this.panel===opened){this.panel=undefined;this.current=undefined;}});
       this.panel.webview.onDidReceiveMessage((value:unknown)=>{try{requireValue(this.current&&!this.current.invalid,'소스 또는 현재 조사가 바뀌었습니다. 변수에서 다시 조회하세요.');const m=decodeGraphAction(value,this.current.token,this.current.graph);void this.action(m,this.current.graph).catch(this.failed);}catch(e){this.failed(e);}});
     }
     this.current={graph,goal,token:nonce()};this.redraw();this.panel.reveal(vscode.ViewColumn.Beside,true);

@@ -16,7 +16,7 @@ import { stepSearchItems } from './ui/stepSearch';
 import { ValueGraphPanel } from './ui/valueGraphPanel';
 import { AnalysisError, AnalysisLimits, EngineLocation, PythonTraceAnalysisPort, RelatedResult, ValueGraphRequest, ValueGraphResult } from './adapters/traceAnalysisPort';
 
-export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; analysisFailure?(message:string):Thenable<boolean>; }
+export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; confirm?(message:string):Thenable<boolean>; analysisFailure?(message:string):Thenable<boolean>; reportError?(error:unknown):Thenable<void>; }
 export interface AnalysisSettings { python:string; paths:string[]; excludePaths?:string[]; limits?:AnalysisLimits; timeoutSeconds?:number }
 const defaultPrompts:PromptPort={input:o=>vscode.window.showInputBox(o),snippet:snippetInput};
 const manual = (snippet=''):CapturedCode=>({snippet,contextBefore:'',contextAfter:''});
@@ -40,6 +40,7 @@ export class InvestigationController {
   private updateStatus():void{this.status.text=this.service?.dirty?(this.service.error?'$(warning) 분기 조사: 저장 실패 · 재시도':'$(sync~spin) 분기 조사: 저장 중'):this.service?'$(list-tree) 분기 조사: 자동 저장':'$(warning) 분기 조사: 저장소 확인 필요';this.status.tooltip=this.service?.error??'조사 순번은 실제 실행 순서가 아닙니다.';if(this.view&&this.tree){this.view.title=this.tree.viewMode==='path'?'현재 경로':'전체 갈래';this.view.message=this.tree.message.replaceAll('\n','\u2028');}}
   async initialize():Promise<void>{this.trusted();this.root=vscode.workspace.workspaceFolders![0].uri.fsPath;this.store??=new JsonStore(this.root);const document=await this.store.open();this.attach(new InvestigationService(document,this.store));if(document.currentStepId){await this.display(document.currentStepId,false);}}
   async failed(error:unknown):Promise<void>{
+    if(this.prompts.reportError){await this.prompts.reportError(error);return;}
     this.updateStatus();
     if(error instanceof AnalysisError && (error.code==='analysis_limit'||error.code==='timeout')){
       const open=this.prompts.analysisFailure?await this.prompts.analysisFailure(error.message):await vscode.window.showErrorMessage(error.message,'분석 설정 열기')==='분석 설정 열기';

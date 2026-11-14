@@ -110,6 +110,43 @@ class ValueGraphTests(unittest.TestCase):
         graph = trace_origins(project, ValueProbe(function.id, "$return", function.location, "return"))
         self.assertFalse(any(n.terminal == "ct_input" for n in graph.nodes))
 
+    def test_parameter_position_maps_all_callers_and_keeps_condition_inputs(self):
+        root = ROOT / "test/caller_paths"
+        before = {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in root.glob("*") if p.suffix in {".c", ".h"}}
+        graph = bridge.value_graph(request_at(root, "Callers.c", "pedal >="))
+        self.assertFalse(graph["truncated"])
+        inputs = {n["expression"] for n in graph["nodes"] if n["terminal"] == "ct_input"}
+        self.assertEqual(inputs, {"Caller_Raw", "Caller_AlternateRaw", "Caller_Enable"})
+        args = [n for n in graph["nodes"] if n["kind"] == "parameter_input"]
+        self.assertTrue(any(n["functionName"] == "Caller_Relay" and n["expression"] == "command" for n in args))
+        self.assertTrue(any(n["functionName"] == "Caller_Run" and n["expression"] == "amount" for n in args))
+        constants = {n["expression"] for n in graph["nodes"] if n["terminal"] == "constant"}
+        self.assertIn("65u", constants)
+        self.assertNotIn("999u", constants)
+        self.assertNotIn("7u", constants)
+        self.assertNotIn("123u", constants)
+        returned = next(n for n in graph["nodes"] if n["kind"] == "return_value" and n["expression"] == "Caller_GetRaw()")
+        self.assertEqual(returned["functionName"], "Caller_GetRaw")
+        self.assertEqual(returned["siteFunctionName"], "Caller_FromFunction")
+        self.assertTrue(all("call_context_not_bound" in n["uncertainty"] for n in args))
+        self.assertEqual(before, {p: (p.read_bytes(), p.stat().st_mtime_ns) for p in before})
+
+    def test_context_contains_condition_but_does_not_widen_navigation_anchor(self):
+        graph = bridge.value_graph(self.request)
+        root = graph["nodes"][0]
+        self.assertEqual(root["location"]["text"], "pedal")
+        self.assertIn("pedal >= 60u", root["context"]["text"])
+        self.assertLessEqual(len(root["context"]["text"]), 2000)
+
+    def test_oversize_context_falls_back_to_the_exact_selected_text(self):
+        with tempfile.TemporaryDirectory() as temp:
+            root = Path(temp)
+            (root / "Long.c").write_text("unsigned Input;\n/*" + "x" * 9000 + "*/\n"
+                                         "int Check(unsigned value) { if (value >= 60u) return 1; return 0; }\n")
+            graph = bridge.value_graph(request_at(root, "Long.c", "value >="))
+            self.assertIsNone(graph["nodes"][0]["context"])
+            self.assertEqual(graph["nodes"][0]["location"]["text"], "value")
+
     def test_high_fanout_is_explicitly_truncated(self):
         with tempfile.TemporaryDirectory() as temp:
             root = Path(temp)
