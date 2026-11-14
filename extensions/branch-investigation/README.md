@@ -198,3 +198,35 @@ VS Code 자체와 다른 확장의 보안/네트워크 정책은 별도 관리 �
 API 참고: [Tree View](https://code.visualstudio.com/api/extension-guides/tree-view),
 [Webview](https://code.visualstudio.com/api/extension-guides/webview),
 [Extension 테스트](https://code.visualstudio.com/api/working-with-extensions/testing-extension).
+
+
+### 큰 프로젝트의 분석 범위와 한도
+
+관련 후보와 함수 검색에 같은 설정이 적용됩니다. 먼저 `analysisPaths`를 필요한 컴포넌트로 좁히고,
+`analysisExcludePaths`에 생성물·미사용 폴더를 지정하세요(작업 폴더 기준 실제 경로, glob 아님).
+
+| 설정 (`branchInvestigation.` 접두사) | 기본값 | 허용 범위 |
+|---|---:|---:|
+| `analysisMaxFiles` | 500 | 1~10000 |
+| `analysisMaxSourceMiB` | 32 | 1~256 |
+| `analysisMaxFileMiB` | 4 | 1~16 |
+| `analysisTimeoutSeconds` | 60 | 1~300 |
+
+한도 초과 시 파일 수·소스 합계·단일 파일 중 원인과 관측 최소값을 표시하고 설정을 여는 버튼을 제공합니다.
+부분 결과를 정상 결과로 반환하지 않습니다. 제외 범위에서 대상을 못 찾았다고 전체 프로젝트에 없다는 뜻은 아닙니다.
+한도를 늘려도 첫 조회가 빨라지는 것은 아닙니다. 기존 캐시는 설정·요청별로 구분하고 C/H 변경 시 비웁니다.
+이 설정은 갱신된 Python 엔진과 함께 사용하세요. 이전 엔진은 추가 옵션을 적용하지 않을 수 있습니다.
+재현용 [602파일 가상 프로젝트](https://github.com/Huelune/autosar-trace-navigator/blob/main/test/scale_scope/README.md)는 기존 파일을 덮어쓰지 않습니다.
+
+
+### 긴 조사 경로 보기
+
+- 기본 **현재 경로**는 현재 단계까지의 조사 경로와 바로 다음 후보만 표시합니다. 20단계를 넘으면 과거 10개씩 접어,
+  목표 아래 표시 깊이를 최대 2단계로 유지합니다. 저장한 부모·호출·데이터 관계는 바꾸지 않습니다.
+- 상단에 목표, 현재 파일·라인, 경로/전체 단계 수와 조사 이유를 유지합니다. 단계 행은 선택한 코드의 첫 줄과 위치를 표시합니다.
+- **현재 단계 찾기**는 현재 행으로 이동합니다. **현재 경로 / 전체 갈래 전환**으로 기존 갈래 묶음도 볼 수 있습니다.
+  전체 갈래는 모든 기록을 보여 주며 갈림길이 연속되면 들여쓰기가 깊어질 수 있습니다.
+- 다른 경로는 기존 **단계 검색**으로 찾으세요. 상태·목표·파일·이유 검색이 그대로 동작합니다.
+  보기 전환·현재 단계 찾기는 조사 JSON을 변경하지 않습니다. 기존 선택 코드 기본 이유·스크롤 유지도 보존합니다.
+
+40단계와 19개 대안 검증은 가상 조사 기록의 표시·탐색 테스트입니다. C 실행 순서나 CT 조건 충족 검증이 아닙니다.
