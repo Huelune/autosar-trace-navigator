@@ -32,5 +32,5 @@ Notion에 외부 변경을 가하지 않고 등록 준비를 완료했다. 상�
 
 ## 인수인계 — 다음 첫 행동
 
-사용자가 실제 기록을 요청하면 [Notion 등록 준비안](../../notion-registration.md)의 순서대로 중복을 다시 확인한 뒤
+사용자가 실제 기록을 요청하면 [Notion 등록 준비안](../../integrations/notion-registration.md)의 순서대로 중복을 다시 확인한 뒤
 Projects부터 생성하고, 관계 연결 후 각 페이지를 재조회한다.

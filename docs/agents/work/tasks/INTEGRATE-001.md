@@ -23,7 +23,7 @@
 
 ## 진행과 검증
 
-두 단계 구현과 자동 검증 완료. [검증 보고서](../../verification/2026-11-14-integration.md). 원격 main 반영 여부는 통합 브랜치 PR과 실제 Git 이력으로 확인한다.
+두 단계 구현과 자동 검증 완료. [검증 보고서](../../history/verification/2026-11-14-integration.md). 원격 main 반영 여부는 통합 브랜치 PR과 실제 Git 이력으로 확인한다.
 
 ## 인수인계 — 다음 첫 행동
 

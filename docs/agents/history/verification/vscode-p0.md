@@ -10,7 +10,7 @@
 작업 시작 기준은 `06f707e`였으며 미추적 지시서 폴더가 있는 것을 확인하고 진행했다.
 
 추가 기록(2026-11-11): 인계 시 원본 지시서가 누락된 문제를 확인해
-[TASK-003](../work/tasks/TASK-003.md)에서 [원본 지시서](05_Codex_VSCode확장_구현지시서.md)를 공유 대상으로 추가했다.
+[TASK-003](../../work/tasks/TASK-003.md)에서 [원본 지시서](../../../branch-investigation/05_Codex_VSCode확장_구현지시서.md)를 공유 대상으로 추가했다.
 위 두 문장은 당시 구현 커밋의 기록이며 현재 지시서도 저장소에 포함한다.
 
 ## 변경 위치와 기존 엔진 경계
@@ -82,7 +82,7 @@ build 산출물과 가상 조사 기록은 Git에 넣지 않았다. VSIX는 로�
 F5는 확장 폴더 자체를 VS Code에서 열고 `npm ci` 후 **분기 조사 확장 실행**을 선택한다.
 실제 자동 Host 검증은 F5와 같은 extensionDevelopmentPath를 CLI로 전달했다. F5 키 자체는 별도로 누르지 않았다.
 사용자 설치는 VS Code의 `Install from VSIX…`에서 위 파일을 선택하면 되며 Node·Python은 필요하지 않다.
-[상세 실행법·5분 확인 절차](../../extensions/branch-investigation/README.md)를 참고한다.
+[상세 실행법·5분 확인 절차](../../../../extensions/branch-investigation/README.md)를 참고한다.
 
 ## 완료와 후속
 

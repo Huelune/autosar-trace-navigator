@@ -1,17 +1,14 @@
-# 다른 PC와 AI 도구에서 개발하기
+# 개발 환경 구성
 
-## 처음 읽을 것
+## 개발 문서
 
-1. [AGENTS.md](AGENTS.md): 공통 설계·테스트·커밋 규칙. Claude Code는 [CLAUDE.md](CLAUDE.md)에서 가져온다.
-2. **VS Code 작업은 [원본 구현 지시서](docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md)**:
-   무엇을 구현하는지에 대한 목적·기능·데이터 계약·단계별 완료 기준. [이어받는 순서](docs/branch-investigation/README.md)도 확인한다.
-3. [현재 상태](docs/work/STATUS.md): 구현된 기능, 검증 근거와 남은 일.
-4. [작업 공유 절차](docs/work/README.md): 작업 카드, 세션 기록, 인수인계와 복사할 시작 프롬프트.
-5. [아키텍처](docs/architecture.md), 담당 영역의 README와 코드.
+- [아키텍처](docs/architecture.md)와 담당 영역의 README·코드를 확인한다.
+- VS Code 확장은 [확장 개발 안내](extensions/branch-investigation/README.md)와 [원본 구현 명세](docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md)를 참고한다.
+- 작업 규칙과 진행 기록은 [개발 지침](docs/agents/README.md)에서 관리한다.
 
 ## 새 PC 구성
 
-Git과 승인된 개발 도구를 먼저 설치한다. Codex/Claude Code 설치·계정·회사 정책은 이 저장소에 포함되지 않는다.
+Git과 필요한 개발 도구를 먼저 설치한다.
 저장소를 복제한 후 루트에서 시작한다. 기존 대화나 원래 PC의 절대 경로는 필요하지 않다.
 
 ```powershell
@@ -79,15 +76,6 @@ Python 캐시 준비/검증은 [uv 안내](docs/uv.md)를 따른다. npm은 연�
 `npm ci --offline --cache <캐시경로> --no-audit --no-fund`로 확인한다. 캐시가 없으면 중단하며 임의로 외부 연결하지 않는다.
 공개 의존성 캐시와 사내 자료를 섞지 않는다. 완성 VSIX를 사용만 할 때는 Node/npm 캐시가 필요 없다.
 
-## 회사 Claude Code에서 시작
+## 작업 규칙
 
-회사에서 허용한 방식으로 이 저장소를 열고 루트에서 Claude Code를 시작한다.
-`CLAUDE.md`는 `@AGENTS.md`를 가져와 공통 규칙을 유지한다. 설치 버전에 맞는 `/memory` 또는
-`/context` 화면에서 실제로 읽힌 지침을 확인한다. 회사의 관리 정책·권한을 저장소 설정으로 우회하지 않는다.
-지침 불러오기는 문서로 구성했으며 이 PC에서 Claude Code를 실제 구동해 검증한 것은 아니다.
-[공식 지침 가져오기 문서](https://code.claude.com/docs/en/memory#import-additional-files).
-
-이 저장소에는 직접 만든 가상 코드·제품 코드·비민감 작업 기록만 공유한다.
-고객/회사 소스, CT 결과, 캡처, 내부 주소, 비밀키와 계정 정보는 작업 카드·로그·커밋에 넣지 않는다.
-`.gitignore`는 반출 허가를 의미하지 않는다. 도구가 사내 자료를 읽어도 된다는 승인도 이 문서에 포함되지 않는다.
-개인 설정은 `CLAUDE.local.md` 또는 `.claude/settings.local.json`에 두고 공유하지 않는다.
+설계·검증·커밋과 작업 인계 기준은 [개발 지침](docs/agents/README.md)을 따른다.

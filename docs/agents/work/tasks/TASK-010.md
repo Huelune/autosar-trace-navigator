@@ -13,7 +13,7 @@ PR #1 병합 뒤에도 병합 전 상태로 남은 설치 절차와 인계 문�
 
 - `todo.md` 1절의 설치 명령을 `main` 기준으로 바꾸는 일도 처음 범위였으나, 같은 수정이 main에 먼저 들어가(`5450e74`) main 쪽을 그대로 쓴다.
 - `docs/branch-investigation/README.md`가 Python 엔진 연결을 미구현으로 안내하던 것을 정정한다.
-- `docs/work/STATUS.md`의 옛 기준 커밋을 지우고 이번 PC의 재확인 결과를 추가한다.
+- `docs/agents/work/STATUS.md`의 옛 기준 커밋을 지우고 이번 PC의 재확인 결과를 추가한다.
 
 ## 범위 밖
 

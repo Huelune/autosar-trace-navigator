@@ -36,7 +36,7 @@ def git_value(root: Path, *args: str) -> str:
 
 def write_record(root: Path, kind: str, filename: str, values: dict[str, str]) -> Path:
     """Fill a repository template and exclusively create a UTF-8 Markdown file."""
-    work = root / "docs/work"
+    work = root / "docs/agents/work"
     template_name = "task.md" if kind == "tasks" else "session.md"
     content = Template((work / "templates" / template_name).read_text(encoding="utf-8")).substitute(values)
     target = work / kind / filename
@@ -64,7 +64,7 @@ def create_session(root: Path, task_id: str, tool: str, actor: str) -> Path:
     validate_id(task_id)
     if tool not in TOOLS or not ACTOR.fullmatch(actor):
         raise ValueError("도구는 codex/claude/human, 담당은 영문·숫자·._- 별칭(1~40자)을 사용하세요.")
-    if not (root / "docs/work/tasks" / (task_id + ".md")).is_file():
+    if not (root / "docs/agents/work/tasks" / (task_id + ".md")).is_file():
         raise ValueError(f"작업 카드가 없습니다: {task_id}")
     now = datetime.now(timezone.utc)
     filename = f"{now:%Y%m%dT%H%M%SZ}-{tool}-{uuid.uuid4().hex}.md"
@@ -78,7 +78,7 @@ def create_session(root: Path, task_id: str, tool: str, actor: str) -> Path:
 
 def list_tasks(root: Path) -> list[Path]:
     """List canonical cards in stable order without performing any writes."""
-    return sorted(path for path in (root / "docs/work/tasks").glob("*.md") if TASK_ID.fullmatch(path.stem))
+    return sorted(path for path in (root / "docs/agents/work/tasks").glob("*.md") if TASK_ID.fullmatch(path.stem))
 
 
 def main(argv: list[str] | None = None) -> int:

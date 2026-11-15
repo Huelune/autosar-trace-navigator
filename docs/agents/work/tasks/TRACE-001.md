@@ -24,7 +24,7 @@ CT 자동 제어/조건 해결, 고객 소스, 원격 반영, 자동 조사 이�
 ## 진행과 검증
 
 엔진/VS Code 미리보기·명시적 추가·유한 한도 구현 및 전체 자동 검증 완료.
-[실제 검증과 한계](../../verification/2026-11-14-origin-preview.md).
+[실제 검증과 한계](../../history/verification/2026-11-14-origin-preview.md).
 
 ## 인수인계 — 다음 첫 행동
 

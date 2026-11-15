@@ -49,5 +49,5 @@
 ## 인수인계
 
 - 다음 첫 행동: 사용자에게 실제 Notion 기록 승인을 받으면 Projects 중복을 다시 확인하고 프로젝트 기준 문서를 생성한다.
-- 등록 순서와 값: [Notion 등록 준비안](../../notion-registration.md).
+- 등록 순서와 값: [Notion 등록 준비안](../../integrations/notion-registration.md).
 - 프로젝트 페이지 생성 후 Project Areas·Work Items·Dev Logs 관계를 연결하고 저장 결과를 모두 재조회한다.

@@ -2,17 +2,12 @@
 
 AUTOSAR Classic C 통합 테스트에서 목표 분기와 탐색 맥락을 보존하는 로컬 도구.
 
-**다른 PC의 Codex·Claude Code에서 개발을 이어가려면 [개발 환경 구성](CONTRIBUTING.md)과
-[현재 작업·인수인계](docs/work/STATUS.md)를 먼저 읽으세요.** 해야 할 일은 작업 카드에,
-실제로 한 일과 검증·다음 행동은 세션별 기록에 남겨 Git으로 공유합니다.
+[VS Code 조사 확장](extensions/branch-investigation/README.md)과 Python/Tkinter 도구를 제공한다.
+설치는 [개발 환경 구성](CONTRIBUTING.md), 사용 예시는 [사용법](docs/user-guide.md)을 참고하세요.
 
-**VS Code 조사 확장 P0**는 [extensions/branch-investigation](extensions/branch-investigation/README.md)에 있습니다.
-무엇을 구현하는지는 **[원본 구현 지시서](docs/branch-investigation/05_Codex_VSCode확장_구현지시서.md)**,
-완료된 P0와 다음 작업을 함께 읽는 방법은 [구현 인수인계](docs/branch-investigation/README.md)를 참고하세요.
 코드 선택·이유 저장 → 조사 트리 → 상세·정확한 소스 재방문을 VS Code 안에서 제공하며 P0는 Python 없이 동작합니다.
 아래 Python/Tkinter 도구와 저장소는 그대로 유지합니다.
-현재 **STEP 1: 프로젝트 구조 및 Python 환경**과 사용자 요청에 따른
-[6단계 추적용 가상 AUTOSAR 샘플](test/README.md)을 구현했습니다.
+[6단계 추적용 가상 AUTOSAR 샘플](test/README.md)을 제공합니다.
 읽기 전용 C/H 파일 스캐너와 함수 정의·호출·분기 구문 파서를 구현했습니다.
 목표 분기·조사 경로를 보존하는 Trace Manager와 SQLite 세션 저장을 구현했습니다.
 이름 기반 RTE Read/Write 공급·소비 후보 분석과 Tkinter GUI도 구현했습니다.
@@ -34,7 +29,7 @@ tests/                       환경·분석·탐색 상태·저장·C 실행 검
 test/                        가상 AUTOSAR C/H 및 C 실행 하네스
 examples/                    저장된 사용 예제 DB와 현재 경로용 DB 생성기
 docs/architecture.md         계층 설계와 후속 단계
-AGENTS.md                    개발 및 테스트 규칙
+docs/agents/                 개발 지침과 작업·검증 기록
 pyproject.toml               패키지 및 파서 의존성
 uv.lock                      실행·테스트 패키지 버전과 배포 파일 해시
 ```
@@ -114,8 +109,7 @@ for branch in result.branches:
 매크로, 전처리 조건, 호출 대상은 확정하지 않고 불확실성과 진단을 기록합니다.
 상세 모델·사용법·제약은 [파서 문서](docs/parser.md)를 참고하세요.
 
-현재 범위의 [통합 검증 결과](docs/verification.md): Python 테스트 171개와
-C 시나리오 216개(기존 12개 + 확장 192개 + 실행 조건 6개 + 구조체 6개) 통과. [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
+목표 분기와 조사 경로의 저장·복원은 [Trace Manager 및 SQLite 사용법](docs/trace.md)을 참고하세요.
 
 **실행 조건** 탭에서는 값을 만드는 코드의 조건 변수를 별도 하위 조사로 따라갑니다.
 extern 등 외부 연결 이름의 전역을 CT 제어 후보로 표시하며 static·const는 제외합니다.
@@ -156,4 +150,4 @@ python -m venv .venv
 
 Python 설치 프로그램 자체도 별도로 준비해야 합니다. wheelhouse와 .venv는
 Git에 포함하지 않습니다. 패키지는 import 시 네트워크·스캔·DB 접근을 수행하지 않습니다.
-설계는 [architecture](docs/architecture.md), 작업 규칙은 [AGENTS.md](AGENTS.md)를 참고하세요.
+설계는 [architecture](docs/architecture.md)를 참고하세요.

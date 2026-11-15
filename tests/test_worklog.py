@@ -17,7 +17,7 @@ class WorklogTests(unittest.TestCase):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)
         self.root = Path(self.temporary.name)
-        shutil.copytree(REPO / "docs/work/templates", self.root / "docs/work/templates")
+        shutil.copytree(REPO / "docs/agents/work/templates", self.root / "docs/agents/work/templates")
 
     def test_task_preserves_title_and_refuses_overwrite(self) -> None:
         task = create_task(self.root, "TASK-010", "RTE $값 출처 조사")
@@ -48,7 +48,7 @@ class WorklogTests(unittest.TestCase):
         for title in ("", "\n", "두\n줄", "tab\tline"):
             with self.assertRaises(ValueError):
                 create_task(self.root, "TASK-010", title)
-        self.assertFalse((self.root / "docs/work/tasks").exists())
+        self.assertFalse((self.root / "docs/agents/work/tasks").exists())
 
     def test_missing_task_and_invalid_actor_do_not_create_sessions(self) -> None:
         with self.assertRaises(ValueError):
@@ -57,7 +57,7 @@ class WorklogTests(unittest.TestCase):
         for tool, actor in (("unknown", "dev-a"), ("claude", "../person"), ("codex", "a\nb")):
             with self.assertRaises(ValueError):
                 create_session(self.root, "TASK-010", tool, actor)
-        self.assertFalse((self.root / "docs/work/sessions").exists())
+        self.assertFalse((self.root / "docs/agents/work/sessions").exists())
 
     def test_list_is_sorted_and_read_only(self) -> None:
         create_task(self.root, "TASK-020", "둘")
@@ -75,9 +75,10 @@ class WorklogTests(unittest.TestCase):
             result = subprocess.run([sys.executable, str(scripts / "worklog.py"), *args],
                                     cwd=REPO, capture_output=True, text=True, check=False)
             self.assertEqual(result.returncode, 0, result.stderr)
-            self.assertIn("docs/work/", result.stdout)
-        self.assertTrue((self.root / "docs/work/tasks/TASK-010.md").is_file())
-        self.assertEqual(len(list((self.root / "docs/work/sessions").glob("*.md"))), 1)
+            self.assertIn("docs/agents/work/", result.stdout)
+        self.assertTrue((self.root / "docs/agents/work/tasks/TASK-010.md").is_file())
+        self.assertEqual(len(list((self.root / "docs/agents/work/sessions").glob("*.md"))), 1)
+        self.assertFalse((self.root / "docs/work").exists())
 
 
 if __name__ == "__main__":

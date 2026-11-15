@@ -24,7 +24,7 @@
 ## 진행과 검증
 
 선택 경로/선택 코드 UI, 호출자 역추적 예시 및 인수 위치/실제 호출부 이름 검증 완료.
-[최종 검증](../../verification/2026-11-15-origin-flow.md): Python227·C225·Node56·VSIX Host3단계·패키지 감사 통과.
+[최종 검증](../../history/verification/2026-11-15-origin-flow.md): Python227·C225·Node56·VSIX Host3단계·패키지 감사 통과.
 
 ## 인수인계 — 다음 첫 행동
 
