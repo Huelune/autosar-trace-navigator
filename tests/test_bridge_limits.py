@@ -77,7 +77,8 @@ class BridgeLimitTests(unittest.TestCase):
                                 input=json.dumps(self.request).encode(), capture_output=True, timeout=60)
         self.assertEqual((result.returncode, result.stderr), (0, b""))
         response = json.loads(result.stdout)
-        self.assertEqual(set(response), {"ok", "error", "limitDetails"})
+        self.assertEqual(set(response), {"ok", "protocolVersion", "error", "limitDetails"})
+        self.assertEqual(response["protocolVersion"], 1)
         self.assertEqual(response["limitDetails"]["observedAtLeast"], 602)
         self.assertNotIn(str(self.root), result.stdout.decode())
 
@@ -99,4 +100,3 @@ class BridgeLimitTests(unittest.TestCase):
             bridge.functions(invalid)
         self.assertEqual(bad.exception.args, ("invalid_request",))
         analyze.assert_not_called()
-

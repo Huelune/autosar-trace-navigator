@@ -1,5 +1,7 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
+import { resolve } from 'node:path';
 import { AnalysisError, parseFunctions, parseRelated, PythonTraceAnalysisPort } from '../../src/adapters/traceAnalysisPort';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { CapturedCode, clone, emptyDocument } from '../../src/domain/model';
@@ -14,6 +16,22 @@ const empty = { ok: true, function: null, variable: null, notes: [], candidates:
 const reply = (value: unknown) => `process.stdout.write(${JSON.stringify(JSON.stringify(value))})`;
 const code = async (run: Promise<unknown>): Promise<string> => { try { await run; } catch (e) { assert.ok(e instanceof AnalysisError); return e.code; } throw new Error('expected a failure'); };
 const idle = new AbortController().signal;
+
+test('shared Python bridge fixture is accepted at protocol version 1', () => {
+  const expected = JSON.parse(readFileSync(resolve(__dirname, '../../../../../test/bridge_contract/expected.json'), 'utf8'));
+  const related = parseRelated(JSON.stringify(expected.related));
+  assert.deepEqual([related.functionName, related.candidates[0].evidence.startCharacter,
+    related.candidates[0].target?.text], ['Caller', 22, 'int Callee(void)']);
+  assert.deepEqual(parseFunctions(JSON.stringify(expected.functions)).functions.map(f => f.name), ['Callee', 'Caller']);
+  for (const version of [0, 2, '1', null]) {
+    assert.throws(() => parseRelated(JSON.stringify({ ...expected.related, protocolVersion: version })),
+      (e: AnalysisError) => e.code === 'invalid_response');
+    assert.throws(() => parseFunctions(JSON.stringify({ ...expected.functions, protocolVersion: version })),
+      (e: AnalysisError) => e.code === 'invalid_response');
+  }
+  // A previously installed engine without the version field remains v1-compatible.
+  assert.equal(parseRelated(JSON.stringify({ ...expected.related, protocolVersion: undefined })).functionName, 'Caller');
+});
 
 test('request is sent as one JSON document and a valid reply is returned as candidates', async () => {
   const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:[r.file,r.line,r.character,r.includePaths[0]].join(':')},variable:'pedal',notes:['access_path_not_supported'],candidates:${JSON.stringify([condition, candidate])},truncated:false}))})`;
@@ -43,9 +61,9 @@ test('cancel stops the process and reports cancelled, before or during the run',
 
 test('configured exclusions and finite budgets are sent to the real process boundary', async () => {
   const limits = { maxFiles: 650, maxSourceBytes: 64 * 1024 * 1024, maxFileBytes: 8 * 1024 * 1024 };
-  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:JSON.stringify([r.excludePaths,r.limits])},variable:null,notes:[],candidates:[],truncated:false}))})`;
+  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:JSON.stringify([r.protocolVersion,r.excludePaths,r.limits])},variable:null,notes:[],candidates:[],truncated:false}))})`;
   const result = await fake(echo).related({ ...request, excludePaths: ['noise'], limits }, idle);
-  assert.deepEqual(JSON.parse(result.functionName!), [['noise'], limits]);
+  assert.deepEqual(JSON.parse(result.functionName!), [1, ['noise'], limits]);
 });
 
 test('limit failures show only validated metric and counts, including old-engine fallback', () => {

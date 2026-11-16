@@ -25,6 +25,29 @@ def write(root: Path, name: str, text: str) -> None:
 
 
 class BridgeTests(unittest.TestCase):
+    def test_shared_contract_fixture_matches_isolated_process(self):
+        fixture = ROOT / "test" / "bridge_contract"
+        expected = json.loads((fixture / "expected.json").read_text(encoding="utf-8"))
+        requests = {
+            "related": {"root": str(fixture.resolve()), "file": "sample.c", "line": 7,
+                        "character": 25, "includePaths": [], "protocolVersion": 1},
+            "functions": {"op": "functions", "root": str(fixture.resolve()),
+                          "includePaths": [], "protocolVersion": 1},
+        }
+        for operation, request in requests.items():
+            with self.subTest(operation=operation):
+                done = subprocess.run([sys.executable, "-I", "-m", "autosar_trace_navigator.bridge"],
+                                      input=json.dumps(request).encode(), capture_output=True, timeout=120)
+                self.assertEqual((done.returncode, done.stderr), (0, b""))
+                self.assertEqual(json.loads(done.stdout), expected[operation])
+        for version in (0, 2, "1", True):
+            with self.subTest(version=version):
+                request = {**requests["functions"], "protocolVersion": version}
+                done = subprocess.run([sys.executable, "-I", "-m", "autosar_trace_navigator.bridge"],
+                                      input=json.dumps(request).encode(), capture_output=True, timeout=120)
+                self.assertEqual(json.loads(done.stdout),
+                                 {"ok": False, "error": "invalid_request", "protocolVersion": 1})
+
     def test_call_and_rte_candidates_stay_separate_with_editor_positions(self):
         before = {path: path.read_bytes() for path in (ROOT / "test").rglob("*.[ch]")}
         result = ask("src/SpeedSignal.c", 36)
@@ -175,9 +198,9 @@ class BridgeTests(unittest.TestCase):
         bad = run(json.dumps({"root": str(ROOT / "secret_missing"), "file": "secret.c", "line": 0,
                               "includePaths": []}).encode())
         self.assertEqual((bad.returncode, bad.stderr), (0, b""))
-        self.assertEqual(json.loads(bad.stdout), {"ok": False, "error": "scope_not_readable"})
+        self.assertEqual(json.loads(bad.stdout), {"ok": False, "error": "scope_not_readable", "protocolVersion": 1})
         self.assertNotIn(b"secret", bad.stdout)
-        self.assertEqual(json.loads(run(b"not json").stdout), {"ok": False, "error": "invalid_request"})
+        self.assertEqual(json.loads(run(b"not json").stdout), {"ok": False, "error": "invalid_request", "protocolVersion": 1})
 
     def test_function_list_is_sorted_scoped_and_points_at_signatures(self):
         with tempfile.TemporaryDirectory() as folder:

@@ -3,6 +3,7 @@ import { spawn } from 'node:child_process';
 /** Engine facts and investigation records stay distinct: a candidate is never a Step until the user picks it. */
 export interface EngineLocation { path: string; startLine: number; endLine: number; startCharacter: number | null; endCharacter: number | null; text: string | null }
 const relations = ['value', 'execution_condition', 'call', 'rte_data'] as const;
+const protocolVersion = 1;
 /** requiredTruth is set only for an execution condition: the truth value needed to reach the cursor, not a proof that it can hold. */
 export interface AnalysisCandidate { relation: typeof relations[number]; label: string; functionName: string | null; uncertainty: string[]; requiredTruth: boolean | null; evidence: EngineLocation; target: EngineLocation | null }
 /** line and character are the editor's zero-based line and UTF-16 column of the cursor. */
@@ -65,8 +66,9 @@ function location(v: unknown): EngineLocation {
 }
 /** Accept only the documented shape; anything else is one error, never a partial result. */
 export function parseRelated(raw: string): RelatedResult {
-  let r: { ok?: unknown; error?: unknown; limitDetails?: unknown; function?: { name?: unknown } | null; variable?: unknown; notes?: unknown; candidates?: unknown; truncated?: unknown };
+  let r: { protocolVersion?: unknown; ok?: unknown; error?: unknown; limitDetails?: unknown; function?: { name?: unknown } | null; variable?: unknown; notes?: unknown; candidates?: unknown; truncated?: unknown };
   try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
+  if (r?.protocolVersion !== undefined && r.protocolVersion !== protocolVersion) { throw new AnalysisError('invalid_response'); }
   if (r?.ok === false) {
     const code = typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal';
     throw new AnalysisError(code, code === 'analysis_limit' ? limitDetails(r.limitDetails) : undefined);
@@ -86,8 +88,9 @@ export function parseRelated(raw: string): RelatedResult {
 }
 
 export function parseFunctions(raw: string): FunctionsResult {
-  let r: { ok?: unknown; error?: unknown; limitDetails?: unknown; functions?: unknown; truncated?: unknown };
+  let r: { protocolVersion?: unknown; ok?: unknown; error?: unknown; limitDetails?: unknown; functions?: unknown; truncated?: unknown };
   try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
+  if (r?.protocolVersion !== undefined && r.protocolVersion !== protocolVersion) { throw new AnalysisError('invalid_response'); }
   if (r?.ok === false) {
     const code = typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal';
     throw new AnalysisError(code, code === 'analysis_limit' ? limitDetails(r.limitDetails) : undefined);
@@ -119,7 +122,7 @@ export class PythonTraceAnalysisPort implements TraceAnalysisPort {
         try { resolve(parse(Buffer.concat(chunks).toString('utf8'))); } catch (e) { reject(e); }
       }));
       child.stdin.on('error', () => {}); // a process that exits before reading is reported by 'close'
-      child.stdin.end(JSON.stringify(request));
+      child.stdin.end(JSON.stringify({ ...request, protocolVersion }));
     });
   }
 }

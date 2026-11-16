@@ -1,0 +1,28 @@
+{
+  "related": {
+    "ok": true,
+    "protocolVersion": 1,
+    "function": { "name": "Caller" },
+    "variable": null,
+    "notes": [],
+    "candidates": [{
+      "relation": "call",
+      "label": "Callee",
+      "functionName": "Callee",
+      "uncertainty": ["unresolved_call_target", "name_only_call_candidate"],
+      "requiredTruth": null,
+      "evidence": { "path": "sample.c", "startLine": 7, "endLine": 7, "startCharacter": 22, "endCharacter": 30, "text": "Callee()" },
+      "target": { "path": "sample.c", "startLine": 0, "endLine": 0, "startCharacter": 0, "endCharacter": 16, "text": "int Callee(void)" }
+    }],
+    "truncated": false
+  },
+  "functions": {
+    "ok": true,
+    "protocolVersion": 1,
+    "truncated": false,
+    "functions": [
+      { "name": "Callee", "signature": { "path": "sample.c", "startLine": 0, "endLine": 0, "startCharacter": 0, "endCharacter": 16, "text": "int Callee(void)" } },
+      { "name": "Caller", "signature": { "path": "sample.c", "startLine": 5, "endLine": 5, "startCharacter": 0, "endCharacter": 16, "text": "int Caller(void)" } }
+    ]
+  }
+}

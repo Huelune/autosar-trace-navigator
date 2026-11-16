@@ -17,6 +17,7 @@ MAX_CANDIDATES = 200
 MAX_FUNCTIONS = 5000
 MAX_TEXT_CHARS = 20000
 MAX_NOTE_CHARS = 200
+PROTOCOL_VERSION = 1
 
 
 class BridgeError(Exception):
@@ -29,11 +30,13 @@ class BridgeError(Exception):
 
 def _scope_options(request: dict) -> dict:
     """Validate explicit finite budgets and exclusions; old requests retain their defaults."""
+    version = request.get("protocolVersion", PROTOCOL_VERSION)
     excluded = request.get("excludePaths", [])
     limits = request.get("limits", {})
     ceilings = {"maxFiles": 10000, "maxSourceBytes": 256 * 1024 * 1024, "maxFileBytes": 16 * 1024 * 1024}
     names = {"maxFiles": "max_files", "maxSourceBytes": "max_source_bytes", "maxFileBytes": "max_file_bytes"}
-    if (not isinstance(excluded, list) or not all(isinstance(item, str) and item.strip() for item in excluded)
+    if (type(version) is not int or version != PROTOCOL_VERSION
+            or not isinstance(excluded, list) or not all(isinstance(item, str) and item.strip() for item in excluded)
             or not isinstance(limits, dict) or set(limits) - ceilings.keys()
             or any(type(value) is not int or not 1 <= value <= ceilings[key] for key, value in limits.items())):
         raise BridgeError("invalid_request")
@@ -246,6 +249,7 @@ def main() -> int:
             response["limitDetails"] = error.limit_details
     except Exception:  # noqa: BLE001 - the traceback could expose paths or source text
         response, status = {"ok": False, "error": "internal"}, 1
+    response["protocolVersion"] = PROTOCOL_VERSION
     sys.stdout.write(json.dumps(response))  # ASCII-only output, independent of console encoding
     return status
 
