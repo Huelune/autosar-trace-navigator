@@ -8,6 +8,10 @@ Python 201개, C 216시나리오, Node 40개, Host 기록/재시작/Restricted M
 통합 브랜치의 PR/main 공유 상태는 실제 Git 이력을 확인한다. 아래 이전 기록과 구분한다.
 [후속 개선 후보](IMPROVEMENTS.md)는 제안이며 추가 구현은 승인 전이다.
 
+## 구성 경계 검토
+
+[ARCH-001](tasks/ARCH-001.md)에서 Python 프로그램과 VS Code 확장의 현재 경계, 브리지 계약 및 독립 배포 기준을 [제안 문서](../component-boundaries.md)로 정리했다. 이 문서는 구조 제안이며 코드 이동은 아직 진행하지 않았다.
+
 ## 이어받을 때
 
 이 문서는 PR #9 병합(2026-11-13) 후의 요약이다. 이후 세부 진행 상태는 작업 카드·최신 세션·실제 코드를 확인한다.
@@ -91,6 +95,7 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-016](tasks/TASK-016.md) | 엔진 함수 검색과 조회 결과 재사용 | 완료, PR #9로 main 반영 |
 | [TASK-017](tasks/TASK-017.md) | P1 병합 후 현재 상태 정리 (문서만) | 완료 |
 | [TASK-018](tasks/TASK-018.md) | 트리에서 갈래마다 묶어 보이기 (사용 피드백) | 완료 (main 반영은 Git 이력으로 확인) |
+| [ARCH-001](tasks/ARCH-001.md) | Python 프로그램과 VS Code 확장 경계 검토 | 제안 문서 완료, `docs/component-boundaries` 브랜치 |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
 TASK-016에서 Python 브리지도 바뀌었으므로 다른 PC는 VSIX와 엔진을 함께 새로 받아야 함수 검색이 동작한다.
