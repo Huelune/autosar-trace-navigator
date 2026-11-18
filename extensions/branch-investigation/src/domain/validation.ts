@@ -4,6 +4,8 @@ export const MAX_HISTORY = 2000;
 export function requireValue(ok: unknown, message: string): asserts ok { if (!ok) { throw new Error(message); } }
 export const validId = (v: unknown): v is string => typeof v === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(v);
 export const utc = (s: unknown): s is string => typeof s === 'string' && /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/.test(s) && Number.isFinite(Date.parse(s)) && new Date(s).toISOString() === s;
+/** A memo is a short note shown on one tree row and in the tooltip. */
+export const MAX_MEMO = 2000;
 export function text(v: unknown, max = 65536): asserts v is string { requireValue(typeof v === 'string' && v.length <= max, '문자열 형식 또는 크기가 잘못됐습니다.'); }
 export function nonempty(v: unknown, max = 65536): asserts v is string { text(v, max); requireValue(v.trim().length > 0, '필수 내용을 입력하세요.'); }
 export function validRange(r: Range): void { requireValue(r && r.start && r.end, '범위가 없습니다.'); for (const p of [r.start, r.end]) { requireValue(Number.isSafeInteger(p.line) && p.line >= 0 && Number.isSafeInteger(p.character) && p.character >= 0, 'UTF-16 위치가 잘못됐습니다.'); } requireValue(r.start.line < r.end.line || r.start.line === r.end.line && r.start.character <= r.end.character, '범위 끝은 시작 이후여야 합니다.'); }
@@ -39,7 +41,7 @@ export function validate(value: unknown): asserts value is WorkspaceDocument {
   for (const s of d.steps) {
     requireValue(goals.has(s.goalId) && anchors.has(s.codeAnchorId) && validStatus(s.status), '단계 참조/상태 오류입니다.');
     requireValue(Number.isSafeInteger(s.sequence) && s.sequence > 0 && !sequences.has(`${s.goalId}:${s.sequence}`), '목표 내 순번 오류입니다.'); sequences.add(`${s.goalId}:${s.sequence}`);
-    nonempty(s.reason); text(s.snippet, 262144); for (const k of ['hypothesis','observation','requiredConditions','derivedConditions','result','nextAction'] as const) { text(s[k]); }
+    nonempty(s.reason); text(s.snippet, 262144); for (const k of ['hypothesis','observation','requiredConditions','derivedConditions','result','nextAction'] as const) { text(s[k]); } if (s.memo !== undefined) { nonempty(s.memo, MAX_MEMO); }
     requireValue(utc(s.createdAt) && utc(s.updatedAt), '단계 시각 오류입니다.');
     requireValue(s.goalSnapshot && s.goalSnapshot.anchor.id === s.goalSnapshot.target.anchorId, '당시 목표 오류입니다.'); nonempty(s.goalSnapshot.title, 200); text(s.goalSnapshot.description); checkTarget(s.goalSnapshot.target); checkAnchor(s.goalSnapshot.anchor);
     if (s.parentStepId !== undefined) { const p = steps.get(s.parentStepId); requireValue(p && p.goalId === s.goalId && p.sequence < s.sequence, '부모는 같은 목표의 이전 단계여야 합니다.'); }

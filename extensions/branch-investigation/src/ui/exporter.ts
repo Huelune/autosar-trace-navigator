@@ -49,6 +49,7 @@ export function exportMarkdown(d: WorkspaceDocument, goalId: string, withCode: b
     const parent = v.steps.find(x => x.id === s.parentStepId), relation = v.relation(s);
     out.push('', `### ${s.sequence}. ${oneLine(s.reason)}`, '', `- 상태: ${statusLabels[s.status]}`, `- 위치: ${v.place(s)}`,
       `- 이어진 곳: ${parent ? `${parent.sequence}번 단계${relation ? ` (${relation})` : ''}` : '목표의 첫 단계'}`, '- 이유:', quote(s.reason));
+    if (s.memo) { out.push('- 메모:', quote(s.memo)); }
     for (const k of noteKeys) { if (s[k].trim()) { out.push(`- ${fields[k]}:`, quote(s[k])); } }
     for (const e of d.evidence.filter(x => x.stepId === s.id)) {
       out.push(`- 근거 — ${evidenceLabels[e.kind]}${e.kind === 'ct_observed' ? ` · ${e.executionLabel ?? ''} · ${e.observedAt ?? ''}` : ''}:`, quote(e.text + (e.memo ? `\n${e.memo}` : '')));
@@ -88,7 +89,7 @@ const css = `body{font-family:system-ui,"Malgun Gothic",sans-serif;margin:24px;c
 export function exportHtml(d: WorkspaceDocument, goalId: string, at: string): string {
   const v = view(d, goalId), h = escapeHtml;
   const node = (s: InvestigationStep): string => {
-    const notes = [['이유', s.reason] as const, ...noteKeys.map(k => [fields[k], s[k]] as const)].filter(([, value]) => value.trim()).map(([label, value]) => `<dt>${h(label)}</dt><dd>${h(value)}</dd>`).join('');
+    const notes = [['이유', s.reason] as const, ['메모', s.memo ?? ''] as const, ...noteKeys.map(k => [fields[k], s[k]] as const)].filter(([, value]) => value.trim()).map(([label, value]) => `<dt>${h(label)}</dt><dd>${h(value)}</dd>`).join('');
     const proof = d.evidence.filter(e => e.stepId === s.id).map(e => `<dt>근거 — ${h(evidenceLabels[e.kind])}</dt><dd>${h(e.text + (e.kind === 'ct_observed' ? `\n${e.executionLabel ?? ''} · ${e.observedAt ?? ''}` : '') + (e.memo ? `\n${e.memo}` : ''))}</dd>`).join('');
     const relation = v.relation(s), below = v.children(s.id);
     return `<li><div class="node ${s.status}${s.id === v.current ? ' current' : ''}"><b>${s.sequence}. ${h(oneLine(s.reason))}</b><span class="badge">${h(statusLabels[s.status])}</span>${relation ? `<span class="badge">${h(relation)}</span>` : ''}${s.id === v.current ? '<span class="badge">현재</span>' : ''}<small>${h(v.place(s))}</small>`

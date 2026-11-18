@@ -53,10 +53,10 @@ test('tree layout keeps a single path on one level and groups each alternative u
 test('selected code becomes a one-line reason default',async()=>{const {reasonFromCode}=await import('../../src/domain/model');
   assert.equal(reasonFromCode('  if (a < 60)\r\n\t  return 0;  \n'),'if (a < 60) return 0;');assert.equal(reasonFromCode('x'.repeat(300)).length,200);assert.equal(reasonFromCode(' \n '),'');});
 test('step search rows carry reason, status, goal, place, notes and code of every goal',async()=>{const {stepSearchItems}=await import('../../src/ui/stepSearch');
-  const {s,root}=await initial();const second=await s.add(capture(),'두 번째\n  이유');await s.edit(second,{...s.document.steps[1],status:'deferred',requiredConditions:'앞선 조건\n거짓',nextAction:'갱신 순서 확인'});
+  const {s,root}=await initial();const second=await s.add(capture(),'두 번째\n  이유');await s.edit(second,{...s.document.steps[1],status:'deferred',requiredConditions:'앞선 조건\n거짓',nextAction:'갱신 순서 확인'});await s.memo(second,'짧은 메모');
   await s.createGoal({title:'다른 목표',description:''},capture());const other=await s.add({snippet:'return value;',contextBefore:'',contextAfter:''},'수동 메모');
   const rows=stepSearchItems(s.document);assert.deepEqual(rows.map(r=>r.stepId),[root,second,other]);
-  assert.deepEqual(rows[1],{label:'2. 두 번째 이유',description:'보류 · 정상 경로 · a.c:3',detail:'필요 조건: 앞선 조건 거짓 | 다음 할 일: 갱신 순서 확인 | 코드: if (pedal >= 60u)',stepId:second});
+  assert.deepEqual(rows[1],{label:'2. 두 번째 이유',description:'보류 · 정상 경로 · a.c:3',detail:'메모: 짧은 메모 | 필요 조건: 앞선 조건 거짓 | 다음 할 일: 갱신 순서 확인 | 코드: if (pedal >= 60u)',stepId:second});
   assert.deepEqual([rows[0].description,rows[0].detail],['조사 중 · 정상 경로 · a.c:3','코드: if (pedal >= 60u)']);assert.equal(rows[2].description,'조사 중 · 다른 목표');
   assert.equal(stepSearchItems(emptyDocument()).length,0);});
 test('bulk paste splits lists and blocks, labels by text shape, and adds siblings in one save',async()=>{const {splitBulk}=await import('../../src/domain/bulkPaste');
@@ -70,12 +70,13 @@ test('bulk paste splits lists and blocks, labels by text shape, and adds sibling
   await assert.rejects(s.addMany([]));await assert.rejects(s.addMany([{capture:{snippet:'x',contextBefore:'',contextAfter:''},reason:' '}]));assert.equal(s.document.steps.length,d.steps.length);});
 test('exports of one goal: handover text with or without code, a self-contained diagram page and a graph',async()=>{const {exportGoal,exportFileName}=await import('../../src/ui/exporter');
   const {s,root}=await initial();const child=await s.add({...capture(),snippet:'a ``` b\n<script>x</script>'},'갈래 하나 <b>&',undefined,{type:'call',uncertainty:[]});
-  await s.edit(child,{...s.document.steps.find(x=>x.id===child)!,status:'deferred',hypothesis:'# 제목 아님\n둘째 줄',nextAction:'순서 확인'});await s.evidence(child,{kind:'ct_observed',text:'값 확인',executionLabel:'CT-가상-01',observedAt:'2026-11-10T01:00:00.000Z',memo:'메모'});
+  await s.edit(child,{...s.document.steps.find(x=>x.id===child)!,status:'deferred',hypothesis:'# 제목 아님\n둘째 줄',nextAction:'순서 확인'});await s.evidence(child,{kind:'ct_observed',text:'값 확인',executionLabel:'CT-가상-01',observedAt:'2026-11-10T01:00:00.000Z',memo:'메모'});await s.memo(child,'<i>단계 메모</i>');
   await s.select(root);const other=await s.add({snippet:'manual "note"',contextBefore:'',contextAfter:''},'다른 갈래');await s.add({snippet:'next()',contextBefore:'',contextAfter:''},'갈래 안 다음');await s.createGoal({title:'다른 목표',description:''},capture());await s.add(capture(),'secret_other_goal_step');
   const d=s.document,goal=d.steps.find(x=>x.id===root)!.goalId,at='2026. 11. 13.';
   const md=exportGoal(d,goal,'handover',at);
   assert.ok(md.startsWith('# 조사 기록: '));assert.ok(md.includes('- 단계 4개 (조사 중 3, 확인 0, 보류 1, 제외 0)'));assert.ok(md.includes('실제 실행 순서가 아닙니다'));
   assert.match(md,/\n- 1\. .* — 조사 중\n  - 2\. 갈래 하나 <b>& — 보류\n  - 3\. 다른 갈래 — 조사 중\n    - 4\. 갈래 안 다음 — 조사 중\n/);assert.ok(md.includes('- 이어진 곳: 1번 단계 (호출)'));assert.ok(md.includes('- 위치: a.c:3'));assert.ok(md.includes('- 위치: 파일 미연결'));
+  assert.ok(md.includes('- 메모:\n  > <i>단계 메모</i>'));assert.ok(exportGoal(d,goal,'diagram',at).includes('<dt>메모</dt><dd>&lt;i&gt;단계 메모&lt;/i&gt;</dd>'),'memo is escaped in the page');
   assert.ok(md.includes('- 가정:\n  > # 제목 아님\n  > 둘째 줄'));assert.ok(md.includes('- 근거 — CT 실측 · CT-가상-01 · 2026-11-10T01:00:00.000Z:\n  > 값 확인\n  > 메모'));assert.ok(md.includes('````c\na ``` b\n<script>x</script>\n````'),'fence outlasts backticks in code');
   assert.ok(!md.includes('secret_other_goal_step'),'other goals are not exported');assert.ok(!md.includes('file:///'),'no absolute file uri');  const plain=exportGoal(d,goal,'handoverNoCode',at);assert.ok(!plain.includes('<script>'));assert.ok(!plain.includes('```'));assert.ok(plain.includes('- 다음 할 일:\n  > 순서 확인'));
   const html=exportGoal(d,goal,'diagram',at);assert.ok(html.startsWith('<!DOCTYPE html>'));assert.ok(html.includes("default-src 'none'"));assert.ok(!/<script|https?:|src=|href=/.test(html),'no script and nothing fetched');

@@ -1,5 +1,5 @@
 import { CapturedCode, clone, CodeAnchor, Evidence, fingerprint, id, InvestigationStep, now, RelationEdge, Status, WorkspaceDocument } from './model';
-import { nonempty, requireValue, validate, validStatus } from './validation';
+import { MAX_MEMO, nonempty, requireValue, validate, validStatus } from './validation';
 import { visit } from '../navigation/history';
 export interface InvestigationRepository { save(d: WorkspaceDocument, expected: number): Promise<WorkspaceDocument> }
 export interface GoalInput { title: string; description: string }
@@ -49,6 +49,8 @@ export class InvestigationService {
   select(stepId: string, sourceOpened = false): Promise<void> { return this.change(d => { const s = d.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); visit(d, { goalId: s.goalId, stepId: s.id, anchorId: s.codeAnchorId }, 'select_step'); if (sourceOpened) { visit(d, { goalId: s.goalId, stepId: s.id, anchorId: s.codeAnchorId }, 'open_source'); } }); }
   navigate(delta: -1 | 1): Promise<string | undefined> { return this.change(d => { const i = d.visitCursor + delta; if (i < 0 || i >= d.visits.length) { return undefined; } const from = d.visits[d.visitCursor]; d.visitCursor = i; const target = d.visits[i]; visit(d, target, delta < 0 ? 'back' : 'forward'); d.navigationEvents.at(-1)!.fromAnchorId = from?.anchorId; return target.stepId; }); }
   edit(stepId: string, edit: StepEdit): Promise<void> { return this.change(d => { const s = d.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); nonempty(edit.reason); requireValue(validStatus(edit.status), '조사 상태가 잘못됐습니다.'); for (const k of ['reason','hypothesis','observation','requiredConditions','derivedConditions','result','nextAction','status'] as const) { s[k] = edit[k] as never; } s.updatedAt = now(); }); }
+  /** Set a step's memo; blank text removes it. Nothing else on the step changes. */
+  memo(stepId: string, memo: string): Promise<void> { return this.change(d => { const s = d.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); const value = memo.trim(); if (value) { nonempty(value, MAX_MEMO); s.memo = value; } else { delete s.memo; } s.updatedAt = now(); }); }
   status(stepId: string, status: Status): Promise<void> { const s = this.value.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); return this.edit(stepId, { ...s, status }); }
   evidence(stepId: string, evidence: Omit<Evidence, 'id'|'stepId'>): Promise<void> { return this.change(d => { requireValue(d.steps.some(s => s.id === stepId), '단계가 없습니다.'); d.evidence.push({ ...clone(evidence), id: id(), stepId }); }); }
   repair(stepId: string, capture: CapturedCode): Promise<void> { return this.change(d => { const s = d.steps.find(s => s.id === stepId); requireValue(s, '단계가 없습니다.'); requireValue(capture.fileUri && capture.range, '재연결에는 파일 선택 범위가 필요합니다.'); s.codeAnchorId = this.anchor(d, capture).id; s.updatedAt = now(); }); }
