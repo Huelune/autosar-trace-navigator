@@ -118,6 +118,12 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "branchInvestigation.openItems",
+        "title": "미해결 조사 목록 (보류·다음 할 일·갈래 끝)",
+        "category": "분기 조사",
+        "icon": "$(checklist)"
+      },
+      {
         "command": "branchInvestigation.searchSteps",
         "title": "조사 단계 검색 (이유·목표·상태·조건)",
         "category": "분기 조사",
@@ -231,6 +237,11 @@
           "command": "branchInvestigation.addBulk",
           "when": "view == branchInvestigation.tree",
           "group": "1_add"
+        },
+        {
+          "command": "branchInvestigation.openItems",
+          "when": "view == branchInvestigation.tree",
+          "group": "2_find"
         },
         {
           "command": "branchInvestigation.searchFunctions",
