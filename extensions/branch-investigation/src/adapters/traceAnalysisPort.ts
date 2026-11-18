@@ -16,7 +16,10 @@ export interface RelatedResult { functionName: string | null; variable: string |
 export interface FunctionsRequest extends ScopeOptions { op: 'functions'; root: string; includePaths: string[] }
 export interface FunctionEntry { name: string; signature: EngineLocation }
 export interface FunctionsResult { functions: FunctionEntry[]; truncated: boolean }
-export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
+/** What the scope settings select, counted from the file system before any analysis. Folder paths are relative to the workspace root. */
+export interface ScopeRequest extends ScopeOptions { op: 'scope'; root: string; includePaths: string[] }
+export interface ScopeResult { files: number; sourceBytes: number; largestFileBytes: number; filesOverFileLimit: number; limits: AnalysisLimits; over: LimitDetails['metric'][]; folders: { path: string; files: number; bytes: number }[]; foldersTruncated: boolean }
+export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult>; scope(request: ScopeRequest, signal: AbortSignal): Promise<ScopeResult> }
 
 /** Kind and next action only. Engine or OS error text may contain paths and is never shown. */
 const messages = {
@@ -96,6 +99,20 @@ export function parseFunctions(raw: string): FunctionsResult {
   return { truncated: r.truncated, functions: r.functions.map((f: FunctionEntry) => { if (!text(f?.name, 1000) || !f.name) { throw new AnalysisError('invalid_response'); } return { name: f.name, signature: location(f.signature) }; }) };
 }
 
+export function parseScope(raw: string): ScopeResult {
+  let r: { ok?: unknown; error?: unknown } & Partial<Record<keyof ScopeResult, unknown>>;
+  try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
+  if (r?.ok === false) { throw new AnalysisError(typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal'); }
+  const limits = r?.limits as AnalysisLimits | undefined, metrics = ['files', 'source_bytes', 'file_bytes'];
+  const inside = (p: unknown) => text(p, 4096) && p !== '' && !/^([\\/]|[A-Za-z]:)/.test(p) && !p.split(/[\\/]/).includes('..');
+  if (r?.ok !== true || ![r.files, r.sourceBytes, r.largestFileBytes, r.filesOverFileLimit, limits?.maxFiles, limits?.maxSourceBytes, limits?.maxFileBytes].every(count)
+    || !Array.isArray(r.over) || r.over.length > 3 || !r.over.every(m => metrics.includes(m)) || typeof r.foldersTruncated !== 'boolean'
+    || !Array.isArray(r.folders) || r.folders.length > 20 || !r.folders.every(f => inside(f?.path) && count(f.files) && count(f.bytes))) { throw new AnalysisError('invalid_response'); }
+  return { files: r.files as number, sourceBytes: r.sourceBytes as number, largestFileBytes: r.largestFileBytes as number, filesOverFileLimit: r.filesOverFileLimit as number,
+    limits: { maxFiles: limits!.maxFiles, maxSourceBytes: limits!.maxSourceBytes, maxFileBytes: limits!.maxFileBytes }, over: [...r.over], foldersTruncated: r.foldersTruncated,
+    folders: r.folders.map((f: { path: string; files: number; bytes: number }) => ({ path: f.path, files: f.files, bytes: f.bytes })) };
+}
+
 /** One short-lived local process per request: no shell, no network, stderr discarded. */
 export class PythonTraceAnalysisPort implements TraceAnalysisPort {
   // ponytail: every request re-parses the scope; the caller keeps results until a source file changes. Switch to a long-lived process with a cached snapshot if a first request is measurably slow.
@@ -103,6 +120,7 @@ export class PythonTraceAnalysisPort implements TraceAnalysisPort {
     private readonly timeoutMs = 60000, private readonly maxOutputBytes = 8 * 1024 * 1024) {}
   related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult> { return this.run(request, signal, parseRelated); }
   functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> { return this.run(request, signal, parseFunctions); }
+  scope(request: ScopeRequest, signal: AbortSignal): Promise<ScopeResult> { return this.run(request, signal, parseScope); }
   private run<T>(request: object, signal: AbortSignal, parse: (raw: string) => T): Promise<T> {
     return new Promise((resolve, reject) => {
       if (signal.aborted) { reject(new AnalysisError('cancelled')); return; }

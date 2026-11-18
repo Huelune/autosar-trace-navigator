@@ -5,16 +5,22 @@ codes only: exception text may hold paths or source values and is never written.
 """
 
 from pathlib import Path
+import inspect
 import json
 import re
 import sys
 
+from .scanner import scan_sources
 from .models import FunctionDefinition, SourceRange, ValueProbe
 from .workbench import AnalysisLimitError, ProjectSnapshot, analyze_project, function_candidates
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_CANDIDATES = 200
 MAX_FUNCTIONS = 5000
+MAX_SCOPE_FOLDERS = 20
+# The budgets an analysis applies when the request names none: read from the engine so the check cannot drift from it.
+DEFAULT_LIMITS = {name: inspect.signature(analyze_project).parameters[name].default
+                  for name in ("max_files", "max_source_bytes", "max_file_bytes")}
 MAX_TEXT_CHARS = 20000
 MAX_NOTE_CHARS = 200
 
@@ -227,6 +233,44 @@ def functions(request: object) -> dict:
                           for item in found[:MAX_FUNCTIONS]]}
 
 
+def scope(request: object) -> dict:
+    """Count and size what the scope settings select, before any analysis.
+
+    Files are listed and their sizes taken from the file system; nothing is read
+    or parsed, so this stays quick where a full analysis would run into a budget.
+    Folders are grouped by the first two path segments under the root.
+    """
+    if not isinstance(request, dict):
+        raise BridgeError("invalid_request")
+    root, includes = request.get("root"), request.get("includePaths")
+    if (not isinstance(root, str) or not Path(root).is_absolute()
+            or not isinstance(includes, list) or not all(isinstance(item, str) for item in includes)):
+        raise BridgeError("invalid_request")
+    options = _scope_options(request)
+    limits = {**DEFAULT_LIMITS, **{key: value for key, value in options.items() if key in DEFAULT_LIMITS}}
+    try:
+        found = scan_sources(Path(root).resolve(strict=True), exclude_paths=options["exclude_paths"], include_paths=includes)
+        sizes = [(item.relative_path, item.path.stat().st_size) for item in found]
+    except (OSError, ValueError):
+        raise BridgeError("scope_not_readable") from None
+    folders: dict[str, list[int]] = {}
+    for relative, size in sizes:
+        entry = folders.setdefault("/".join(relative.parts[:-1][:2]) or ".", [0, 0])
+        entry[0] += 1
+        entry[1] += size
+    total, largest = sum(size for _, size in sizes), max((size for _, size in sizes), default=0)
+    exceeded = (("files", len(sizes) > limits["max_files"]), ("source_bytes", total > limits["max_source_bytes"]),
+                ("file_bytes", largest > limits["max_file_bytes"]))
+    ranked = sorted(folders.items(), key=lambda item: (-item[1][1], -item[1][0], item[0]))
+    return {"ok": True, "files": len(sizes), "sourceBytes": total, "largestFileBytes": largest,
+            "filesOverFileLimit": sum(size > limits["max_file_bytes"] for _, size in sizes),
+            "limits": {"maxFiles": limits["max_files"], "maxSourceBytes": limits["max_source_bytes"],
+                       "maxFileBytes": limits["max_file_bytes"]},
+            "over": [metric for metric, hit in exceeded if hit],
+            "folders": [{"path": path, "files": count, "bytes": size} for path, (count, size) in ranked[:MAX_SCOPE_FOLDERS]],
+            "foldersTruncated": len(ranked) > MAX_SCOPE_FOLDERS}
+
+
 def main() -> int:
     """Exit 0 for a result or a handled error code, 1 for an unexpected failure."""
     status = 0
@@ -238,8 +282,8 @@ def main() -> int:
             request = json.loads(raw)
         except ValueError:
             raise BridgeError("invalid_request") from None
-        is_search = isinstance(request, dict) and request.get("op") == "functions"
-        response = functions(request) if is_search else related(request)
+        op = request.get("op") if isinstance(request, dict) else None
+        response = {"functions": functions, "scope": scope}.get(op, related)(request)
     except BridgeError as error:
         response = {"ok": False, "error": error.args[0]}
         if error.limit_details is not None:

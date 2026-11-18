@@ -135,6 +135,15 @@ export async function run():Promise<void>{
         await command('traceRelated');await command('searchFunctions');assert.equal(offers,2);assert.equal(service.document.revision,unchanged,'failure and cancelled picks keep the investigation unchanged');
         app.setAnalysisSettingsForTests(()=>base);
         console.log('PASS Host: related and function budgets / exclusions / settings-aware cache / no partial step');}
+      {// Scope check: the real engine counts files and sizes without analysing; the same settings that make an analysis fail are flagged here first.
+        const base={python:process.env.BRANCH_HOST_PYTHON!,paths:['.']},unchanged=service.document.revision;let rows:{label:string;description?:string}[]=[],title='',failure='';
+        app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,analysisFailure:async m=>{failure=m;return false;},pick:async(items,options)=>{rows=items;title=options.title??'';return undefined;}});
+        app.setAnalysisSettingsForTests(()=>base);await command('checkScope');assert.match(rows[0].label,/^\$\(check\) C\/H 파일 수: \d+개 \/ 한도 500개$/);assert.ok(title.includes('한도 안입니다'));
+        const total=Number(/파일 수: (\d+)개/.exec(rows[0].label)![1]);assert.ok(total>=4);assert.ok(rows.some(r=>r.label==='$(folder) (작업 폴더 바로 아래)'&&r.description!.startsWith(`파일 ${total}개`)));assert.ok(rows.at(-2)!.label.includes('제외 경로 설정: 없음'));
+        app.setAnalysisSettingsForTests(()=>({...base,excludePaths:['unicode.c'],limits:{maxFiles:1,maxSourceBytes:33554432,maxFileBytes:4194304}}));await command('checkScope');
+        assert.equal(rows[0].label,`$(error) C/H 파일 수: ${total-1}개 / 한도 1개`);assert.equal(rows[0].description,'한도 초과');assert.ok(title.includes('한도 초과로 분석이 실패합니다'));assert.ok(rows.at(-2)!.label.includes('1개 적용됨'));
+        assert.equal(failure,'','the check itself reports the excess instead of failing');assert.equal(service.document.revision,unchanged);app.setAnalysisSettingsForTests(()=>base);
+        console.log('PASS Host: scope check counts before analysis / flags the budget an analysis would hit / obeys exclusions');}
     }else{console.log('SKIP Host: engine link not run (no Python with the engine was found)');}
     // Deleting asks first; declining changes nothing. A deleted subtree is gone after restart as well (expected.json is written below).
     {const before=service.document,target=before.steps.find(s=>s.id===sibling.id)!;let asked='';

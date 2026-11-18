@@ -100,3 +100,32 @@ class BridgeLimitTests(unittest.TestCase):
         self.assertEqual(bad.exception.args, ("invalid_request",))
         analyze.assert_not_called()
 
+    def test_scope_check_counts_before_any_analysis_and_leaves_sources_untouched(self) -> None:
+        request = {"op": "scope", "root": str(self.root.resolve()), "includePaths": ["."]}
+        before = {path: (path.stat().st_mtime_ns, path.read_bytes()) for path in self.root.rglob("*.c")}
+        sizes = [len(data) for _, data in before.values()]
+        with patch.object(bridge, "analyze_project") as analyze:
+            found = bridge.scope(request)
+        analyze.assert_not_called()
+        self.assertEqual((found["files"], found["sourceBytes"], found["largestFileBytes"]), (602, sum(sizes), max(sizes)))
+        self.assertEqual(found["limits"], {"maxFiles": 500, "maxSourceBytes": 32 * 1024 * 1024, "maxFileBytes": 4 * 1024 * 1024})
+        self.assertEqual((found["over"], found["filesOverFileLimit"], found["foldersTruncated"]), (["files"], 0, False))
+        self.assertEqual(found["folders"][0]["path"], "noise")
+        self.assertEqual(found["folders"][0]["files"], 600)
+        self.assertEqual({item["path"] for item in found["folders"]}, {"noise", "app", "supplier"})
+        self.assertNotIn(str(self.root.resolve()), json.dumps(found))
+        self.assertEqual({path: (path.stat().st_mtime_ns, path.read_bytes()) for path in self.root.rglob("*.c")}, before)
+        # The check obeys the same exclusions and budgets as the analysis it predicts.
+        scoped = bridge.scope({**request, "excludePaths": ["noise"], "limits": {"maxFiles": 2, "maxFileBytes": 16}})
+        self.assertEqual((scoped["files"], scoped["over"], scoped["filesOverFileLimit"]), (2, ["file_bytes"], 2))
+        self.assertEqual(bridge.scope({**request, "limits": {"maxFiles": 650}})["over"], [])
+        for bad, code in (({**request, "limits": {"maxFiles": 0}}, "invalid_request"), ({**request, "root": "relative"}, "invalid_request"),
+                          ({**request, "includePaths": ["../secret"]}, "scope_not_readable"), ([], "invalid_request")):
+            with self.subTest(code=code), self.assertRaises(bridge.BridgeError) as raised:
+                bridge.scope(bad)
+            self.assertEqual(raised.exception.args, (code,))
+        done = subprocess.run([sys.executable, "-I", "-m", "autosar_trace_navigator.bridge"], input=json.dumps(request).encode(),
+                              capture_output=True, timeout=120)
+        self.assertEqual((done.returncode, done.stderr), (0, b""))
+        self.assertEqual(json.loads(done.stdout)["files"], 602)
+

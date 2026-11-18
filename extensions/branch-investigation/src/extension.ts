@@ -6,6 +6,7 @@ import { CapturedCode, clone, CodeAnchor, InvestigationStep, reasonFromCode, sta
 import { InvestigationService, GoalInput, StepLink } from './domain/investigationService';
 import { BULK_LIMIT, bulkKindLabel, splitBulk } from './domain/bulkPaste';
 import { ExportFormat, exportFileName, exportFormats, exportGoal } from './ui/exporter';
+import { scopeRows } from './ui/scopeRows';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
@@ -152,6 +153,14 @@ export class InvestigationController {
     const options={title:`함수 ${items.length}개${result.truncated?' (이름순 앞부분만, 분석 범위를 줄이세요)':''} — 분석 범위 안의 정의만 보여 줍니다. 범위 밖에 없다는 뜻은 아닙니다.`,placeHolder:'함수 이름이나 경로의 일부를 입력하세요.',matchOnDescription:true};
     const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));if(picked){await this.openEngine(root,picked.entry.signature);}
   }
+  /** Scope check: counts and sizes from the file system, compared with the budgets, before waiting for an analysis that would fail. */
+  private async checkScope():Promise<void>{
+    this.ready();const {python,paths,root,excludePaths,limits,timeoutSeconds}=await this.engine(),request={op:'scope' as const,root,includePaths:paths,excludePaths,limits};
+    const result=await this.analysed('분석 범위 점검 중',['scope',python,request],signal=>new PythonTraceAnalysisPort(python,undefined,timeoutSeconds*1000).scope(request,signal));
+    const items=scopeRows(result,excludePaths??[]),options={title:`분석 범위 점검 — ${result.over.length?'이대로는 한도 초과로 분석이 실패합니다':'한도 안입니다'} (파싱 전, 파일 수와 크기 기준)`,placeHolder:'분석에 걸리는 시간은 점검하지 않습니다. 큰 폴더를 제외 경로에 넣거나 분석 범위를 좁히세요.',matchOnDescription:true};
+    const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
+    if(picked?.settings){await vscode.commands.executeCommand('workbench.action.openSettings','@ext:huelune.branch-investigation analysis');}
+  }
   private async offerRelated(root:string,result:RelatedResult):Promise<void>{
     if(!result.functionName){void vscode.window.showInformationMessage('커서가 분석된 함수 안에 있지 않습니다.');return;}
     // Reason codes for what the engine could not do at the cursor. Unknown codes are not shown as text.
@@ -198,7 +207,7 @@ export class InvestigationController {
     command('addSnippet',async()=>{this.ready();const snippet=await this.prompts.snippet();if(snippet?.trim()){await this.add(manual(snippet));}});
     command('traceRelated',async()=>this.related());
     command('focusCurrentStep',async()=>{const id=this.ready().document.currentStepId;requireValue(id,'현재 조사단계가 없습니다.');await vscode.commands.executeCommand('branchInvestigation.tree.focus');await this.view?.reveal({kind:'step',id},{select:true,focus:true,expand:true});});
-    command('toggleTraceView',async()=>{this.ready();const mode=this.tree!.viewMode==='path'?'branches':'path';await this.context.workspaceState.update('traceViewMode',mode);this.tree!.setMode(mode);this.updateStatus();const id=this.ready().document.currentStepId;if(id&&this.view?.visible){await this.view.reveal({kind:'step',id},{select:true,focus:false});}});command('searchFunctions',async()=>this.searchFunctions());
+    command('toggleTraceView',async()=>{this.ready();const mode=this.tree!.viewMode==='path'?'branches':'path';await this.context.workspaceState.update('traceViewMode',mode);this.tree!.setMode(mode);this.updateStatus();const id=this.ready().document.currentStepId;if(id&&this.view?.visible){await this.view.reveal({kind:'step',id},{select:true,focus:false});}});command('searchFunctions',async()=>this.searchFunctions());command('checkScope',async()=>this.checkScope());
     const sources=vscode.workspace.createFileSystemWatcher('**/*.{c,h,C,H}'),stale=()=>this.analysisCache.clear();sources.onDidChange(stale);sources.onDidCreate(stale);sources.onDidDelete(stale);this.context.subscriptions.push(sources);
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
     command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
