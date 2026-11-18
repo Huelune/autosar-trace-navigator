@@ -14,6 +14,7 @@ import { sourcePath } from './storage/paths';
 import { AnchorCandidate, anchorCandidates, resolveAnchor, AnchorResolution } from './navigation/anchorResolver';
 import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
+import { LOCATION_CHECKING, LOCATION_VERIFIED } from './ui/html';
 import { snippetInput } from './ui/snippetInput';
 import { openItems, stepSearchItems } from './ui/stepSearch';
 import { AnalysisError, AnalysisLimits, EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
@@ -106,9 +107,9 @@ export class InvestigationController {
   }
   /** panel=true only for the explicit 자세히 보기 command; every other path, including a click on a step, leaves a closed detail panel closed. */
   private async display(stepId:string,openSource:boolean,record=false,panel=false):Promise<void>{const service=this.ready(),d=service.document,step=d.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');const anchor=d.anchors.find(a=>a.id===step.codeAnchorId)!;
-    this.details.show(step,anchor,'위치 확인 중…',d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
+    this.details.show(step,anchor,LOCATION_CHECKING,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
     const resolved=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());this.lastResolution=resolved;
-    this.details.show(step,anchor,resolved.state==='verified'?'저장 범위의 현재 텍스트 일치 (실행 검증 아님)':resolved.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
+    this.details.show(step,anchor,resolved.state==='verified'?LOCATION_VERIFIED:resolved.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);
     if(openSource&&resolved.state==='verified'){
       // Recheck the live buffer immediately before selecting; an unsaved edit must not be ignored.
       const checked=await resolveAnchor(this.root!,anchor,async uri=>(await vscode.workspace.openTextDocument(vscode.Uri.parse(uri))).getText());if(checked.state!=='verified'){this.lastResolution=checked;this.details.show(step,anchor,checked.message,d.evidence.filter(e=>e.stepId===step.id),service.dirty,panel);return;}

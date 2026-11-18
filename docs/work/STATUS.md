@@ -99,7 +99,9 @@ VS Code 확장은 기본 설정에서 Python을 실행하지 않는다. Python �
 | [TASK-020](tasks/TASK-020.md) | 미해결 조사와 다음 행동 목록 | 완료, PR #15로 main 반영 |
 | [TASK-021](tasks/TASK-021.md) | 분석 전 범위 점검 (파일 수·크기·한도) | 완료, PR #16으로 main 반영 |
 | [TASK-022](tasks/TASK-022.md) | 현재 경로의 이어지는 단계 펼침과 코드의 경로 번호 표시 | 완료, PR #17로 main 반영 |
-| [TASK-023](tasks/TASK-023.md) | 조사 단계 메모 | 완료 (main 반영은 Git 이력으로 확인) |
+| [TASK-023](tasks/TASK-023.md) | 조사 단계 메모 | 완료, PR #18로 main 반영 |
+| [TASK-024](tasks/TASK-024.md) | 디자인 기준용 제품 기록(PRODUCT.md) | 완료 (main 반영은 Git 이력으로 확인) |
+| [TASK-025](tasks/TASK-025.md) | 상세 패널 개선 (critique 반영) | 완료 (main 반영은 Git 이력으로 확인) |
 
 다른 PC 설치(루트 `todo.md` 1절)의 실사용 결과는 아직 돌아오지 않았다.
 TASK-016에서 Python 브리지도 바뀌었으므로 다른 PC는 VSIX와 엔진을 함께 새로 받아야 함수 검색이 동작한다.
