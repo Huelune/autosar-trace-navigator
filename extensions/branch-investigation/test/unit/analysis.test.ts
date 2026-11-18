@@ -1,6 +1,6 @@
 import { test } from 'node:test';
 import assert from 'node:assert/strict';
-import { AnalysisError, parseRelated, PythonTraceAnalysisPort } from '../../src/adapters/traceAnalysisPort';
+import { AnalysisError, parseFunctions, parseRelated, PythonTraceAnalysisPort } from '../../src/adapters/traceAnalysisPort';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { CapturedCode, clone, emptyDocument } from '../../src/domain/model';
 
@@ -41,6 +41,28 @@ test('cancel stops the process and reports cancelled, before or during the run',
   assert.equal(await code(fake('setTimeout(()=>{},60000)').related(request, before.signal)), 'cancelled');
 });
 
+test('configured exclusions and finite budgets are sent to the real process boundary', async () => {
+  const limits = { maxFiles: 650, maxSourceBytes: 64 * 1024 * 1024, maxFileBytes: 8 * 1024 * 1024 };
+  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:JSON.stringify([r.excludePaths,r.limits])},variable:null,notes:[],candidates:[],truncated:false}))})`;
+  const result = await fake(echo).related({ ...request, excludePaths: ['noise'], limits }, idle);
+  assert.deepEqual(JSON.parse(result.functionName!), [['noise'], limits]);
+});
+
+test('limit failures show only validated metric and counts, including old-engine fallback', () => {
+  for (const metric of ['files', 'source_bytes', 'file_bytes'] as const) {
+    const detail = { metric, observedAtLeast: 602, limit: 500 };
+    assert.throws(() => parseRelated(JSON.stringify({ ok: false, error: 'analysis_limit', limitDetails: detail })),
+      (e: AnalysisError) => e.code === 'analysis_limit' && e.limitDetails?.metric === metric
+        && e.message.includes('602') && e.message.includes('500') && e.message.includes('부분 결과'));
+  }
+  for (const detail of [null, { metric: 'secret/path', observedAtLeast: 602, limit: 500 },
+    { metric: 'files', observedAtLeast: 500, limit: 500 }, { metric: 'files', observedAtLeast: '602', limit: 500 },
+    { metric: 'files', observedAtLeast: 602, limit: -1 }]) {
+    assert.throws(() => parseRelated(JSON.stringify({ ok: false, error: 'analysis_limit', limitDetails: detail })),
+      (e: AnalysisError) => e.code === 'invalid_response' && !e.message.includes('secret'));
+  }
+});
+
 test('a reply that could move the editor outside the workspace or to a guessed column is refused whole', () => {
   const ok = { ...empty, function: { name: 'F' }, candidates: [candidate] };
   assert.equal(parseRelated(JSON.stringify(ok)).candidates.length, 1);
@@ -72,4 +94,24 @@ test('a picked candidate records its relation type and engine uncertainty; manua
   assert.deepEqual([linked.type, linked.uncertainty], ['data_dependency', ['name_only_connection', 'investigation_order_is_not_execution_order']]);
   assert.deepEqual([manual.type, manual.uncertainty], ['manual', ['investigation_order_is_not_execution_order']]);
   assert.deepEqual([required.type, required.uncertainty], ['manual', ['condition_satisfiability_not_proven', 'execution_requirement_false', 'investigation_order_is_not_execution_order']]);
+});
+
+test('function list request carries op and a reply is accepted only in the documented shape', async () => {
+  const signature = { path: 'src/a.c', startLine: 2, endLine: 2, startCharacter: 0, endCharacter: 14, text: 'void Alpha(void)' }, ok = { ok: true, truncated: false, functions: [{ name: 'Alpha', signature }] };
+  const echo = `let d='';process.stdin.on('data',c=>d+=c).on('end',()=>{const r=JSON.parse(d);process.stdout.write(JSON.stringify({ok:true,truncated:true,functions:[{name:r.op+':'+r.includePaths.join(','),signature:${JSON.stringify(signature)}}]}))})`;
+  const got = await fake(echo).functions({ op: 'functions', root: 'C:/virtual', includePaths: ['src', 'inc'] }, new AbortController().signal);
+  assert.deepEqual(got, { truncated: true, functions: [{ name: 'functions:src,inc', signature }] });
+  assert.equal(parseFunctions(JSON.stringify(ok)).functions[0].signature.startLine, 2);
+  for (const bad of [{ ...ok, truncated: 'no' }, { ...ok, functions: {} }, { ...ok, functions: [{ name: '', signature }] }, { ...ok, functions: [{ name: 'A', signature: { ...signature, path: '../secret.c' } }] },
+    { ...ok, functions: [{ name: 'A', signature: { ...signature, path: 'C:/secret.c' } }] }, { ...ok, functions: Array.from({ length: 5001 }, () => ({ name: 'A', signature })) }, { ok: true }]) {
+    assert.throws(() => parseFunctions(JSON.stringify(bad)), (e: AnalysisError) => e.code === 'invalid_response');
+  }
+  assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'analysis_limit' })), (e: AnalysisError) => e.code === 'analysis_limit');
+  assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'secret text' })), (e: AnalysisError) => e.code === 'internal' && !e.message.includes('secret'));
+});
+
+test('function search validates structured budget errors as strictly as related lookup', () => {
+  const detail = {metric:'files',observedAtLeast:602,limit:500};
+  assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:detail})),(e:AnalysisError)=>e.code==='analysis_limit'&&e.limitDetails?.metric==='files');
+  assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:{...detail,limit:-1}})),(e:AnalysisError)=>e.code==='invalid_response');
 });

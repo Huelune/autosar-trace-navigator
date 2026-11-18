@@ -9,6 +9,7 @@ JSON 저장소와 AnchorResolver/NavigationHistory를 사용한다. 기록은 `.
 커서 변수의 값 출처, 커서 위치의 실행 조건, 커서 함수의 호출·RTE Writer 후보를 JSON으로 받는다.
 bridge는 analyze_project, function_candidates, ValueResolver(access_at/sources/conditions)를 재사용하고
 Tkinter·SQLite를 불러오지 않는다. 후보는 사용자가 골라 이유를 적을 때만 조사 단계가 된다.
+같은 bridge가 범위의 함수 정의 목록도 돌려주며, 확장은 엔진 결과를 작업 폴더의 C/H 파일이 바뀔 때까지 메모리에 두고 다시 쓴다.
 자세한 [설치·설계·검증 안내](../extensions/branch-investigation/README.md)를 참고한다.
 
 ## 예정된 데이터 흐름

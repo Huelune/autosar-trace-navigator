@@ -24,5 +24,7 @@ export const fingerprint = (text: string): string => {
   for(let i=0;i<text.length;i++){const c=text.charCodeAt(i);if(c>=0xd800&&c<=0xdbff){const low=text.charCodeAt(++i);if(!(low>=0xdc00&&low<=0xdfff)){throw new Error('선택 범위가 Unicode 문자 중간에서 끊겼습니다. 범위를 다시 선택하세요.');}}else if(c>=0xdc00&&c<=0xdfff){throw new Error('선택 범위가 Unicode 문자 중간에서 끊겼습니다. 범위를 다시 선택하세요.');}}
   return createHash('sha256').update(text, 'utf8').digest('hex');
 };
+/** One-line form of the selected code, offered as the reason so a step can be found in the tree by its code. */
+export const reasonFromCode = (snippet: string): string => snippet.replace(/\s+/g, ' ').trim().slice(0, 200);
 export const clone = <T>(value: T): T => structuredClone(value);
 export function emptyDocument(): WorkspaceDocument { return { schemaVersion: 1, revision: 0, repositoryId: id(), goals: [], steps: [], codeNodes: [], anchors: [], navigationEvents: [], relations: [], evidence: [], visits: [], visitCursor: -1 }; }

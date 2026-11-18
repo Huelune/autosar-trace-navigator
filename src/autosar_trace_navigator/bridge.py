@@ -14,12 +14,30 @@ from .workbench import AnalysisLimitError, ProjectSnapshot, analyze_project, fun
 
 MAX_REQUEST_BYTES = 1024 * 1024
 MAX_CANDIDATES = 200
+MAX_FUNCTIONS = 5000
 MAX_TEXT_CHARS = 20000
 MAX_NOTE_CHARS = 200
 
 
 class BridgeError(Exception):
     """A handled failure; args[0] is a stable code, not a message."""
+
+    def __init__(self, code: str, limit_details: dict | None = None) -> None:
+        super().__init__(code)
+        self.limit_details = limit_details
+
+
+def _scope_options(request: dict) -> dict:
+    """Validate explicit finite budgets and exclusions; old requests retain their defaults."""
+    excluded = request.get("excludePaths", [])
+    limits = request.get("limits", {})
+    ceilings = {"maxFiles": 10000, "maxSourceBytes": 256 * 1024 * 1024, "maxFileBytes": 16 * 1024 * 1024}
+    names = {"maxFiles": "max_files", "maxSourceBytes": "max_source_bytes", "maxFileBytes": "max_file_bytes"}
+    if (not isinstance(excluded, list) or not all(isinstance(item, str) and item.strip() for item in excluded)
+            or not isinstance(limits, dict) or set(limits) - ceilings.keys()
+            or any(type(value) is not int or not 1 <= value <= ceilings[key] for key, value in limits.items())):
+        raise BridgeError("invalid_request")
+    return {"exclude_paths": excluded, **{names[key]: value for key, value in limits.items()}}
 
 
 def _location(project: ProjectSnapshot, sources: dict[Path, bytes], span: SourceRange) -> dict:
@@ -145,10 +163,12 @@ def related(request: object) -> dict:
             or not Path(root).is_absolute()):
         raise BridgeError("invalid_request")
     try:
-        project = analyze_project(root, include_paths=includes)
+        options = _scope_options(request)
+        project = analyze_project(root, include_paths=includes, **options)
         target = (project.root / file).resolve()
-    except AnalysisLimitError:
-        raise BridgeError("analysis_limit") from None
+    except AnalysisLimitError as error:
+        raise BridgeError("analysis_limit", {"metric": error.metric, "observedAtLeast": error.observed_at_least,
+                                              "limit": error.limit}) from None
     except (OSError, ValueError):
         raise BridgeError("scope_not_readable") from None
     sources = dict(project.sources)
@@ -182,6 +202,31 @@ def related(request: object) -> dict:
             "candidates": candidates[:MAX_CANDIDATES], "truncated": len(candidates) > MAX_CANDIDATES}
 
 
+def functions(request: object) -> dict:
+    """Every function definition in the scope with its signature location, ordered by name.
+
+    The editor filters this list itself and keeps it until a source file changes, so
+    one analysis serves many searches. A missing name is missing from the scope only.
+    """
+    if not isinstance(request, dict):
+        raise BridgeError("invalid_request")
+    root, includes = request.get("root"), request.get("includePaths")
+    if (not isinstance(root, str) or not Path(root).is_absolute()
+            or not isinstance(includes, list) or not all(isinstance(item, str) for item in includes)):
+        raise BridgeError("invalid_request")
+    try:
+        project = analyze_project(root, include_paths=includes, **_scope_options(request))
+    except AnalysisLimitError as error:
+        raise BridgeError("analysis_limit", {"metric": error.metric, "observedAtLeast": error.observed_at_least, "limit": error.limit}) from None
+    except (OSError, ValueError):
+        raise BridgeError("scope_not_readable") from None
+    sources = dict(project.sources)
+    found = sorted(project.functions, key=lambda item: (item.name.casefold(), item.location.path, item.location.start_byte))
+    return {"ok": True, "truncated": len(found) > MAX_FUNCTIONS,
+            "functions": [{"name": item.name, "signature": _location(project, sources, _signature(sources, item))}
+                          for item in found[:MAX_FUNCTIONS]]}
+
+
 def main() -> int:
     """Exit 0 for a result or a handled error code, 1 for an unexpected failure."""
     status = 0
@@ -193,9 +238,12 @@ def main() -> int:
             request = json.loads(raw)
         except ValueError:
             raise BridgeError("invalid_request") from None
-        response = related(request)
+        is_search = isinstance(request, dict) and request.get("op") == "functions"
+        response = functions(request) if is_search else related(request)
     except BridgeError as error:
         response = {"ok": False, "error": error.args[0]}
+        if error.limit_details is not None:
+            response["limitDetails"] = error.limit_details
     except Exception:  # noqa: BLE001 - the traceback could expose paths or source text
         response, status = {"ok": False, "error": "internal"}, 1
     sys.stdout.write(json.dumps(response))  # ASCII-only output, independent of console encoding

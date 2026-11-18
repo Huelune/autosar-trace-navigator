@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { CapturedCode, clone, emptyDocument, id, WorkspaceDocument } from '../../src/domain/model';
 import { InvestigationService } from '../../src/domain/investigationService';
 import { validate } from '../../src/domain/validation';
-import { forks, shownChildren, shownParent, startsBranch } from '../../src/ui/treeLayout';
+import { branchSize, forks, onBranch, shownChildren, shownParent, startsBranch } from '../../src/ui/treeLayout';
 const capture=(file='file:///C:/fictional/a.c'):CapturedCode=>({snippet:'if (pedal >= 60u)',fileUri:file,relativePath:'a.c',range:{start:{line:2,character:0},end:{line:2,character:18}},contextBefore:'',contextAfter:''});
 const setup=()=>new InvestigationService(emptyDocument(),{async save(d){const n=clone(d);n.revision++;return n;}});
 async function initial(){const s=setup();const root=await s.add(capture(),'목표 입력 확인',{title:'정상 경로',description:'수동 분기 앵커'});return {s,root};}
@@ -30,20 +30,59 @@ test('deleting a goal removes its steps only and leaves no goal current',async()
   assert.deepEqual(d.goals.map(g=>g.id),[kept]);assert.equal(d.steps.length,2);assert.equal(d.steps[0].id,root);assert.equal(d.currentGoalId,undefined);assert.equal(d.currentStepId,undefined);
   assert.ok(!d.anchors.some(a=>a.fileUri?.endsWith('d.c')));assert.ok(d.navigationEvents.every(e=>e.goalId===kept));await assert.rejects(s.removeGoal(doomed));
 });
-test('tree layout keeps a single path on one level and indents only where the investigation forks',()=>{
+test('tree layout keeps a single path on one level and groups each alternative under its first step',()=>{
   const step=(n:number,parent?:number)=>({id:'s'+n,goalId:'g',parentStepId:parent===undefined?undefined:'s'+parent,sequence:n});
   // 1 -> 2 -> 3, then 3 forks into 4 -> 5 and 6 -> 7; 7 forks again into 8 and 9.
   const steps=[step(1),step(2,1),step(3,2),step(4,3),step(5,4),step(6,3),step(7,6),step(8,7),step(9,7)];
   const ids=(parent:{kind:'goal'|'step';id:string})=>shownChildren(steps,parent).map(s=>s.id);
   assert.deepEqual(ids({kind:'goal',id:'g'}),['s1','s2','s3']);assert.deepEqual(ids({kind:'step',id:'s1'}),[]);assert.deepEqual(ids({kind:'step',id:'s2'}),[]);
-  assert.deepEqual(ids({kind:'step',id:'s3'}),['s4','s5','s6','s7']);assert.deepEqual(ids({kind:'step',id:'s7'}),['s8','s9']);assert.deepEqual(ids({kind:'step',id:'s5'}),[]);
+  assert.deepEqual(ids({kind:'step',id:'s3'}),['s4','s6']);assert.deepEqual(ids({kind:'step',id:'s4'}),['s5']);assert.deepEqual(ids({kind:'step',id:'s6'}),['s7']);assert.deepEqual(ids({kind:'step',id:'s7'}),['s8','s9']);assert.deepEqual(ids({kind:'step',id:'s5'}),[]);assert.deepEqual(ids({kind:'step',id:'s8'}),[]);
   assert.deepEqual(steps.filter(s=>forks(steps,s.id)).map(s=>s.id),['s3','s7']);assert.deepEqual(steps.filter(s=>startsBranch(steps,s)).map(s=>s.id),['s4','s6','s8','s9']);
   // Every step appears exactly once, and the parent used for reveal agrees with where it is listed.
   const seen:string[]=[];const walk=(parent:{kind:'goal'|'step';id:string})=>{for(const s of shownChildren(steps,parent)){seen.push(s.id);assert.deepEqual(shownParent(steps,s),parent);walk({kind:'step',id:s.id});}};walk({kind:'goal',id:'g'});
   assert.deepEqual(seen.sort(),steps.map(s=>s.id).sort());
-  // Depth is the number of forks above a step, not the number of steps: nine steps, two levels below the goal.
+  // Depth grows only at forks: a fork's alternatives are one level down and the rest of each alternative one more.
   const depth=(s:{id:string;goalId:string;parentStepId?:string;sequence:number})=>{let n=0;for(let p=shownParent(steps,s);p.kind==='step';p=shownParent(steps,steps.find(x=>x.id===p.id)!)){n++;}return n;};
-  assert.deepEqual(steps.map(depth),[0,0,0,1,1,1,1,2,2]);
-  // Two first steps under one goal are both listed at the goal level.
-  assert.deepEqual(shownChildren([step(1),step(2,1),step(3)],{kind:'goal',id:'g'}).map(s=>s.id),['s1','s2','s3']);
+  assert.deepEqual(steps.map(depth),[0,0,0,1,2,1,2,3,3]);
+  // A route counts every step below its first step; the current step is on the routes of all its ancestors only.
+  assert.deepEqual(['s4','s6','s8'].map(id=>branchSize(steps,id)),[2,4,1]);assert.deepEqual(['s4','s6','s8','s9'].map(id=>onBranch(steps,id,'s9')),[false,true,false,true]);assert.equal(onBranch(steps,'s6',undefined),false);
+  // Two first steps under one goal are two routes as well: each heads its own group at the goal level.
+  const two=[step(1),step(2,1),step(3)];assert.deepEqual(shownChildren(two,{kind:'goal',id:'g'}).map(s=>s.id),['s1','s3']);assert.deepEqual(shownChildren(two,{kind:'step',id:'s1'}).map(s=>s.id),['s2']);
+  assert.deepEqual(shownParent(two,two[1]),{kind:'step',id:'s1'});assert.deepEqual(two.filter(s=>startsBranch(two,s)).map(s=>s.id),['s1','s3']);
+});
+test('selected code becomes a one-line reason default',async()=>{const {reasonFromCode}=await import('../../src/domain/model');
+  assert.equal(reasonFromCode('  if (a < 60)\r\n\t  return 0;  \n'),'if (a < 60) return 0;');assert.equal(reasonFromCode('x'.repeat(300)).length,200);assert.equal(reasonFromCode(' \n '),'');});
+test('step search rows carry reason, status, goal, place, notes and code of every goal',async()=>{const {stepSearchItems}=await import('../../src/ui/stepSearch');
+  const {s,root}=await initial();const second=await s.add(capture(),'두 번째\n  이유');await s.edit(second,{...s.document.steps[1],status:'deferred',requiredConditions:'앞선 조건\n거짓',nextAction:'갱신 순서 확인'});
+  await s.createGoal({title:'다른 목표',description:''},capture());const other=await s.add({snippet:'return value;',contextBefore:'',contextAfter:''},'수동 메모');
+  const rows=stepSearchItems(s.document);assert.deepEqual(rows.map(r=>r.stepId),[root,second,other]);
+  assert.deepEqual(rows[1],{label:'2. 두 번째 이유',description:'보류 · 정상 경로 · a.c:3',detail:'필요 조건: 앞선 조건 거짓 | 다음 할 일: 갱신 순서 확인 | 코드: if (pedal >= 60u)',stepId:second});
+  assert.deepEqual([rows[0].description,rows[0].detail],['조사 중 · 정상 경로 · a.c:3','코드: if (pedal >= 60u)']);assert.equal(rows[2].description,'조사 중 · 다른 목표');
+  assert.equal(stepSearchItems(emptyDocument()).length,0);});
+test('bulk paste splits lists and blocks, labels by text shape, and adds siblings in one save',async()=>{const {splitBulk}=await import('../../src/domain/bulkPaste');
+  const text='Rte_Read_A\r\nsrc/app/secret_like.c:42\r\nFoo()\r\n\r\nif (a < 60 && p->ok)\r\n\r\n  x = a > b;\r\n  return x;\r\n\r\n\r\np->v >= 3\n\nvalue = 1;';
+  assert.deepEqual(splitBulk(text).items,[{kind:'function',text:'Rte_Read_A'},{kind:'path',text:'src/app/secret_like.c:42'},{kind:'function',text:'Foo()'},{kind:'condition',text:'if (a < 60 && p->ok)'},{kind:'code',text:'  x = a > b;\n  return x;'},{kind:'condition',text:'p->v >= 3'},{kind:'code',text:'value = 1;'}]);
+  assert.deepEqual(splitBulk(' \n\n').items,[]);assert.equal(splitBulk('p->v').items[0].kind,'code');
+  const many=splitBulk(Array.from({length:150},(_,i)=>`f${i}`).join('\n'));assert.equal(many.items.length,100);assert.equal(many.truncated,true);
+  const {s,root}=await initial(),rev=s.document.revision,ids=await s.addMany([{capture:{snippet:'Foo',contextBefore:'',contextAfter:''},reason:'함수명: Foo'},{capture:{snippet:'a < 1',contextBefore:'',contextAfter:''},reason:'조건식: a < 1'}]);
+  const d=s.document;assert.equal(d.revision,rev+1);assert.equal(d.currentStepId,root);assert.deepEqual(ids.map(i=>d.steps.find(x=>x.id===i)!.parentStepId),[root,root]);assert.deepEqual(ids.map(i=>d.steps.find(x=>x.id===i)!.sequence),[2,3]);
+  assert.equal(d.relations.filter(r=>r.fromStepId===root).length,2);assert.ok(ids.every(i=>d.anchors.find(a=>a.id===d.steps.find(x=>x.id===i)!.codeAnchorId)!.state==='snippet_only'));validate(d);
+  await assert.rejects(s.addMany([]));await assert.rejects(s.addMany([{capture:{snippet:'x',contextBefore:'',contextAfter:''},reason:' '}]));assert.equal(s.document.steps.length,d.steps.length);});
+test('exports of one goal: handover text with or without code, a self-contained diagram page and a graph',async()=>{const {exportGoal,exportFileName}=await import('../../src/ui/exporter');
+  const {s,root}=await initial();const child=await s.add({...capture(),snippet:'a ``` b\n<script>x</script>'},'갈래 하나 <b>&',undefined,{type:'call',uncertainty:[]});
+  await s.edit(child,{...s.document.steps.find(x=>x.id===child)!,status:'deferred',hypothesis:'# 제목 아님\n둘째 줄',nextAction:'순서 확인'});await s.evidence(child,{kind:'ct_observed',text:'값 확인',executionLabel:'CT-가상-01',observedAt:'2026-11-10T01:00:00.000Z',memo:'메모'});
+  await s.select(root);const other=await s.add({snippet:'manual "note"',contextBefore:'',contextAfter:''},'다른 갈래');await s.add({snippet:'next()',contextBefore:'',contextAfter:''},'갈래 안 다음');await s.createGoal({title:'다른 목표',description:''},capture());await s.add(capture(),'secret_other_goal_step');
+  const d=s.document,goal=d.steps.find(x=>x.id===root)!.goalId,at='2026. 11. 13.';
+  const md=exportGoal(d,goal,'handover',at);
+  assert.ok(md.startsWith('# 조사 기록: '));assert.ok(md.includes('- 단계 4개 (조사 중 3, 확인 0, 보류 1, 제외 0)'));assert.ok(md.includes('실제 실행 순서가 아닙니다'));
+  assert.match(md,/\n- 1\. .* — 조사 중\n  - 2\. 갈래 하나 <b>& — 보류\n  - 3\. 다른 갈래 — 조사 중\n    - 4\. 갈래 안 다음 — 조사 중\n/);assert.ok(md.includes('- 이어진 곳: 1번 단계 (호출)'));assert.ok(md.includes('- 위치: a.c:3'));assert.ok(md.includes('- 위치: 파일 미연결'));
+  assert.ok(md.includes('- 가정:\n  > # 제목 아님\n  > 둘째 줄'));assert.ok(md.includes('- 근거 — CT 실측 · CT-가상-01 · 2026-11-10T01:00:00.000Z:\n  > 값 확인\n  > 메모'));assert.ok(md.includes('````c\na ``` b\n<script>x</script>\n````'),'fence outlasts backticks in code');
+  assert.ok(!md.includes('secret_other_goal_step'),'other goals are not exported');assert.ok(!md.includes('file:///'),'no absolute file uri');  const plain=exportGoal(d,goal,'handoverNoCode',at);assert.ok(!plain.includes('<script>'));assert.ok(!plain.includes('```'));assert.ok(plain.includes('- 다음 할 일:\n  > 순서 확인'));
+  const html=exportGoal(d,goal,'diagram',at);assert.ok(html.startsWith('<!DOCTYPE html>'));assert.ok(html.includes("default-src 'none'"));assert.ok(!/<script|https?:|src=|href=/.test(html),'no script and nothing fetched');
+  assert.ok(html.includes('갈래 하나 &lt;b&gt;&amp;'));assert.ok(html.includes('&lt;script&gt;x&lt;/script&gt;'));assert.ok(html.includes('class="node deferred"'));assert.ok(html.includes('<span class="badge">호출</span>'));
+  assert.equal((html.match(/<li>/g)??[]).length,5);assert.equal((html.match(/<ul>/g)??[]).length,3);assert.ok(!html.includes('secret_other_goal_step'));
+  const graph=exportGoal(d,goal,'mermaid',at);assert.ok(graph.includes('```mermaid\nflowchart TD\n  goal(["목표: '));assert.ok(graph.includes('  s1 -->|호출| s2'));assert.ok(graph.includes('  s1 --> s3'));assert.ok(graph.includes('  s3 --> s4'));assert.ok(graph.includes('  goal --> s1'));
+  assert.match(graph,/  s2\["2\. 갈래 하나  b  <br\/>보류 · a\.c:3"\]:::deferred/);assert.ok(graph.includes("  s3[\"3. 다른 갈래<br/>조사 중 · 파일 미연결\"]:::investigating"));assert.ok(!graph.includes('<script>'));
+  assert.throws(()=>exportGoal(d,'missing','handover',at));
+  assert.equal(exportFileName('a/b: "c"? .. d','handover','2026-11-13'),'조사-a_b_c_d-2026-11-13.md');assert.equal(exportFileName(' / ','diagram','2026-11-13'),'조사-목표-2026-11-13.html');assert.equal(exportFileName('목표','mermaid','2026-11-13'),'조사-목표-2026-11-13-graph.md');
 });
