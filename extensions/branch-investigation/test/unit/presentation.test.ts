@@ -88,6 +88,22 @@ test('code marks: one per line for the active route, only where the saved text i
   assert.deepEqual(pathMarks(d, () => false, text), []);
 });
 
+test('a memo is one row under its step in either view, or none; setting it changes nothing else', async () => {
+  const { s, main } = await history(true), before = s.document.steps.find(step => step.id === main[3])!;
+  await s.memo(main[3], '  레지스터 초기화 뒤에 다시 보기  '); const after = s.document.steps.find(step => step.id === main[3])!;
+  assert.equal(after.memo, '레지스터 초기화 뒤에 다시 보기');
+  assert.deepEqual({ ...after, memo: undefined, updatedAt: '' }, { ...before, memo: undefined, updatedAt: '' });
+  for (const mode of ['path', 'branches'] as const) {
+    const view = new TracePresentation(s.document, mode, true), memo = view.getChildren({ kind: 'step', id: main[3] })[0];
+    assert.deepEqual(memo, { kind: 'memo', id: `memo:${main[3]}`, stepId: main[3] });
+    assert.deepEqual(view.getParent(memo), { kind: 'step', id: main[3] }); assert.deepEqual(view.getChildren(memo), []);
+    assert.ok(!new TracePresentation(s.document, mode, false).getChildren({ kind: 'step', id: main[3] }).some(e => e.kind === 'memo'));
+  }
+  assert.equal(rows(new TracePresentation(s.document, 'branches', true)).ids.length, 59, 'memo rows do not hide or duplicate steps');
+  await assert.rejects(s.memo(main[3], 'x'.repeat(2001))); assert.equal(s.document.steps.find(step => step.id === main[3])!.memo, '레지스터 초기화 뒤에 다시 보기');
+  await s.memo(main[3], '   '); assert.ok(!('memo' in s.document.steps.find(step => step.id === main[3])!), 'blank text removes the memo');
+});
+
 test('view groups keep stable IDs as a path grows; labels distinguish repeated reasons and Unicode stays whole', async () => {
   const { s } = await history();
   const first = new TracePresentation(s.document, 'path').getChildren({ kind: 'goal', id: s.document.currentGoalId! })[0];

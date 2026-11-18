@@ -2,7 +2,7 @@ import { shownChildren, shownParent } from './treeLayout';
 import { CodeAnchor, InvestigationStep, WorkspaceDocument } from '../domain/model';
 
 export type TraceViewMode = 'path' | 'branches';
-export type TraceEntry = { kind: 'goal' | 'step'; id: string } | { kind: 'group'; id: string; goalId: string; stepIds: string[] };
+export type TraceEntry = { kind: 'goal' | 'step'; id: string } | { kind: 'group'; id: string; goalId: string; stepIds: string[] } | { kind: 'memo'; id: string; stepId: string };
 export const shortText = (text: string, length = 65): string => {
   const characters = [...text.replace(/\s+/g, ' ').trim()];
   return characters.length > length ? characters.slice(0, length - 1).join('') + '…' : characters.join('');
@@ -37,7 +37,7 @@ export class TracePresentation {
   private children = new Map<string, TraceEntry[]>();
   private parents = new Map<string, TraceEntry>();
   readonly path: InvestigationStep[];
-  constructor(readonly document: WorkspaceDocument, readonly mode: TraceViewMode) {
+  constructor(readonly document: WorkspaceDocument, readonly mode: TraceViewMode, readonly memoRows = false) {
     this.path = currentPath(document); const ahead = continuation(document);
     if (mode === 'branches') { return; }
     for (const goal of document.goals) {
@@ -64,13 +64,19 @@ export class TracePresentation {
     }
   }
   getChildren(parent?: TraceEntry): TraceEntry[] {
+    if (parent?.kind === 'memo') { return []; }
+    const memo = this.memoRows && parent?.kind === 'step' && this.document.steps.find(step => step.id === parent.id)?.memo;
+    return memo ? [{ kind: 'memo', id: `memo:${parent!.id}`, stepId: parent!.id }, ...this.stepChildren(parent)] : this.stepChildren(parent);
+  }
+  private stepChildren(parent?: TraceEntry): TraceEntry[] {
     if (this.mode === 'branches') {
       if (!parent) { return this.document.goals.map(goal=>({kind:'goal',id:goal.id})); }
-      return parent.kind === 'group' ? [] : shownChildren(this.document.steps,parent).map(step=>({kind:'step',id:step.id}));
+      return parent.kind === 'group' || parent.kind === 'memo' ? [] : shownChildren(this.document.steps,parent).map(step=>({kind:'step',id:step.id}));
     }
     return parent ? this.children.get(parent.id) ?? [] : this.document.goals.map(goal => ({ kind: 'goal', id: goal.id }));
   }
   getParent(entry: TraceEntry): TraceEntry | undefined {
+    if (entry.kind === 'memo') { return { kind: 'step', id: entry.stepId }; }
     if (this.mode === 'branches') {
       const step=entry.kind==='step'?this.document.steps.find(step=>step.id===entry.id):undefined;
       return step?shownParent(this.document.steps,step):undefined;

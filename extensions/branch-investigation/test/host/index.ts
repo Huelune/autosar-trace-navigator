@@ -45,6 +45,15 @@ export async function run():Promise<void>{
       assert.equal(mine().length,1);assert.ok(mine()[0].label.includes(`#${sequence}`));assert.equal(mine()[0].line,editor.selection.start.line);
       await editor.edit(e=>e.insert(new vscode.Position(0,0),'\n'));assert.equal(mine().length,0);await vscode.commands.executeCommand('undo');assert.equal(mine().length,1);
       console.log('PASS Host: code shows the current route number / shifted code shows none');}
+    {// Memo: the command on a tree row writes it, it shows as a row one level in and in the tooltip, and blank input removes it.
+      const counts=[service.document.steps.length,service.document.relations.length,service.document.currentStepId];
+      app.setPromptsForTests({input:async o=>{assert.equal(o.value,'');return '초기화 뒤 다시 보기';},snippet:async()=>undefined});await command('editMemo',{kind:'step',id:writer});
+      const row=app.tree!.getChildren({kind:'step',id:writer})[0];assert.equal(row.kind,'memo');assert.equal(app.tree!.getTreeItem(row).label,'초기화 뒤 다시 보기');
+      assert.ok(String(app.tree!.getTreeItem({kind:'step',id:writer}).tooltip).includes('메모: 초기화 뒤 다시 보기'));
+      app.tree!.setMemoRows(false);assert.ok(!app.tree!.getChildren({kind:'step',id:writer}).some(e=>e.kind==='memo'));assert.match(String(app.tree!.getTreeItem({kind:'step',id:writer}).description),/ · 메모$/);app.tree!.setMemoRows(true);
+      app.setPromptsForTests({input:async o=>{assert.equal(o.value,'초기화 뒤 다시 보기');return ' ';},snippet:async()=>undefined});await command('editMemo',row);
+      assert.equal(service.document.steps.find(s=>s.id===writer)!.memo,undefined);assert.deepEqual([service.document.steps.length,service.document.relations.length,service.document.currentStepId],counts);
+      console.log('PASS Host: memo from the tree row / shown one level in and in the tooltip / tooltip-only option / blank removes it');}
     {// Search lists every step; typing is the quick pick's own filter. Picking one visits it and creates nothing.
       const counts=[service.document.steps.length,service.document.relations.length];let rows:{label:string;description?:string;detail?:string}[]=[];
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{rows=items;return items.find(i=>i.description?.startsWith('보류'));}});await command('openStep',reader);await command('searchSteps');

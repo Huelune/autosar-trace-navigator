@@ -8,7 +8,7 @@ import { BULK_LIMIT, bulkKindLabel, splitBulk } from './domain/bulkPaste';
 import { ExportFormat, exportFileName, exportFormats, exportGoal } from './ui/exporter';
 import { scopeRows } from './ui/scopeRows';
 import { PathMark, pathMarks } from './ui/pathMarks';
-import { requireValue, validId } from './domain/validation';
+import { MAX_MEMO, requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
 import { AnchorCandidate, anchorCandidates, resolveAnchor, AnchorResolution } from './navigation/anchorResolver';
@@ -52,7 +52,7 @@ export class InvestigationController {
   setPromptsForTests(prompts:PromptPort):void{requireValue(this.context.extensionMode===vscode.ExtensionMode.Test,'입력 포트 교체는 Host 테스트에서만 허용합니다.');this.prompts=prompts;}
   private trusted():void{requireValue(vscode.workspace.isTrusted,'신뢰하지 않은 작업 공간에서는 조사 기록을 만들거나 파일을 열지 않습니다.');requireValue(vscode.workspace.workspaceFolders?.length===1&&vscode.workspace.workspaceFolders[0].uri.scheme==='file','단일 로컬 작업 폴더만 지원합니다. 다중 루트·원격 문서는 수동 붙여넣기로만 준비하세요.');}
   ready():InvestigationService{this.trusted();requireValue(this.service,'조사 저장소를 열지 못했습니다. 잠금 또는 백업 복구 명령을 확인하세요.');return this.service;}
-  private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service,this.context.workspaceState.get('traceViewMode')==='branches'?'branches':'path');this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();this.markEditors();};this.updateStatus();this.markEditors();}
+  private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service,this.context.workspaceState.get('traceViewMode')==='branches'?'branches':'path',this.memoRows());this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();this.markEditors();};this.updateStatus();this.markEditors();}
   private updateStatus():void{this.status.text=this.service?.dirty?(this.service.error?'$(warning) 분기 조사: 저장 실패 · 재시도':'$(sync~spin) 분기 조사: 저장 중'):this.service?'$(list-tree) 분기 조사: 자동 저장':'$(warning) 분기 조사: 저장소 확인 필요';this.status.tooltip=this.service?.error??'조사 순번은 실제 실행 순서가 아닙니다.';if(this.view&&this.tree){this.view.title=this.tree.viewMode==='path'?'현재 경로':'전체 갈래';this.view.message=this.tree.message.replaceAll('\n','\u2028');}}
   async initialize():Promise<void>{this.trusted();this.root=vscode.workspace.workspaceFolders![0].uri.fsPath;this.store??=new JsonStore(this.root);const document=await this.store.open();this.attach(new InvestigationService(document,this.store));if(document.currentStepId){await this.display(document.currentStepId,false);}}
   async failed(error:unknown):Promise<void>{
@@ -196,7 +196,9 @@ export class InvestigationController {
     const {relation,requiredTruth,uncertainty}=picked.candidate;
     await this.add(await this.capture(this.snapshotOf(doc,range)),relation==='execution_condition'?{type:'manual',uncertainty:[...uncertainty,`execution_requirement_${requiredTruth}`]}:{type:relation==='call'?'call':'data_dependency',uncertainty});
   }
-  private stepId(arg:unknown):string{const candidate=typeof arg==='string'?arg:arg&&typeof arg==='object'?(arg as {id?:unknown}).id:undefined;const value=candidate??this.ready().document.currentStepId;requireValue(validId(value),'조사단계를 선택하세요.');return value;}
+  private memoRows=():boolean=>vscode.workspace.getConfiguration('branchInvestigation').get<string>('memoDisplay','row')==='row';
+  /** A memo row stands for its step. */
+  private stepId(arg:unknown):string{const candidate=typeof arg==='string'?arg:arg&&typeof arg==='object'?(arg as {stepId?:unknown;id?:unknown}).stepId??(arg as {id?:unknown}).id:undefined;const value=candidate??this.ready().document.currentStepId;requireValue(validId(value),'조사단계를 선택하세요.');return value;}
   register():void{
     const command=(name:string,action:(arg:unknown,snapshot?:SelectionSnapshot)=>Promise<unknown>,capture=false)=>this.context.subscriptions.push(vscode.commands.registerCommand('branchInvestigation.'+name,(arg:unknown)=>{
       const snapshot=capture?this.snapshot():undefined;const p=this.operations.then(()=>{this.trusted();return action(arg,snapshot);});this.operations=p.catch(()=>{});return p.catch(e=>this.failed(e));
@@ -226,7 +228,7 @@ export class InvestigationController {
     command('focusCurrentStep',async()=>{const id=this.ready().document.currentStepId;requireValue(id,'현재 조사단계가 없습니다.');await vscode.commands.executeCommand('branchInvestigation.tree.focus');await this.view?.reveal({kind:'step',id},{select:true,focus:true,expand:true});});
     command('toggleTraceView',async()=>{this.ready();const mode=this.tree!.viewMode==='path'?'branches':'path';await this.context.workspaceState.update('traceViewMode',mode);this.tree!.setMode(mode);this.updateStatus();const id=this.ready().document.currentStepId;if(id&&this.view?.visible){await this.view.reveal({kind:'step',id},{select:true,focus:false});}});command('searchFunctions',async()=>this.searchFunctions());command('checkScope',async()=>this.checkScope());
     const sources=vscode.workspace.createFileSystemWatcher('**/*.{c,h,C,H}'),stale=()=>this.analysisCache.clear();sources.onDidChange(stale);sources.onDidCreate(stale);sources.onDidDelete(stale);this.context.subscriptions.push(sources);
-    const remark=()=>this.markEditors();this.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(remark),vscode.workspace.onDidChangeTextDocument(remark),vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('branchInvestigation.showPathNumbersInCode')){remark();}}));
+    const remark=()=>this.markEditors();this.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(remark),vscode.workspace.onDidChangeTextDocument(remark),vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('branchInvestigation.showPathNumbersInCode')){remark();}if(e.affectsConfiguration('branchInvestigation.memoDisplay')){this.tree?.setMemoRows(this.memoRows());}}));
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
     command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
       const options={title:'조사 단계 검색 — 이유·목표·상태·위치·조건·코드',placeHolder:'입력한 글자가 든 단계만 남습니다. 상태 이름(조사 중·확인·보류·제외)으로도 거를 수 있습니다.',matchOnDescription:true,matchOnDetail:true};
@@ -239,6 +241,9 @@ export class InvestigationController {
       if(picked){await this.display(picked.stepId,true,true);await this.view?.reveal({kind:'step',id:picked.stepId},{select:true,expand:true,focus:false});}});
     command('openStep',async arg=>this.display(this.stepId(arg),true,true));
     command('editStep',async arg=>this.display(this.stepId(arg),false,false,true));
+    command('editMemo',async arg=>{const service=this.ready(),stepId=this.stepId(arg),step=service.document.steps.find(s=>s.id===stepId);requireValue(step,'조사단계가 없습니다.');
+      const memo=await this.prompts.input({title:`#${step.sequence} 메모`,prompt:'짧은 메모 — 비우고 Enter를 누르면 메모를 지웁니다.',value:step.memo??'',validateInput:v=>v.trim().length<=MAX_MEMO?undefined:`메모는 ${MAX_MEMO}자까지입니다.`});
+      if(memo!==undefined){await service.memo(stepId,memo);}});
     command('switchGoal',async arg=>{const service=this.ready();let target=typeof arg==='string'?arg:undefined;if(!target){target=(await vscode.window.showQuickPick(service.document.goals.map(g=>({label:g.title,id:g.id})),{title:'조사 목표 전환'}))?.id;}if(target){await service.switchGoal(target);}});
     command('setStatus',async arg=>{const stepId=this.stepId(arg),choice=await vscode.window.showQuickPick(Object.entries(statusLabels).map(([status,label])=>({label,status:status as Status})),{title:'조사 상태 — 확인은 CT 실측 확인과 다릅니다.'});if(choice){await this.ready().status(stepId,choice.status);await this.display(stepId,false);}});
     command('goParent',async()=>{const service=this.ready(),d=service.document,parent=d.steps.find(s=>s.id===d.currentStepId)?.parentStepId;requireValue(parent,'현재 단계의 상위 조사가 없습니다.');await this.display(parent,true,true);});
