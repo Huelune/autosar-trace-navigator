@@ -21,6 +21,16 @@ export function currentPath(document: WorkspaceDocument): InvestigationStep[] {
   }
   return path.reverse();
 }
+/** Steps below the selected one: the single way on while there is only one, then every alternative at the next fork. */
+export function continuation(document: WorkspaceDocument): { run: InvestigationStep[]; choices: InvestigationStep[] } {
+  const kids = new Map<string, InvestigationStep[]>();
+  for (const step of [...document.steps].sort((a, b) => a.sequence - b.sequence)) { if (step.parentStepId) { kids.set(step.parentStepId, [...kids.get(step.parentStepId) ?? [], step]); } }
+  const run: InvestigationStep[] = []; let next = currentPath(document).length ? kids.get(document.currentStepId!) ?? [] : [];
+  while (next.length === 1 && run.length < document.steps.length) { run.push(next[0]); next = kids.get(next[0].id) ?? []; } // the length bound stops a corrupt parent cycle
+  return { run, choices: next };
+}
+/** The route the user is on: from the first step through the selected one and on until the next fork. */
+export const activeRoute = (document: WorkspaceDocument): InvestigationStep[] => [...currentPath(document), ...continuation(document).run];
 
 /** Presentation only: rows have a goal parent or one collapsible history-group parent. */
 export class TracePresentation {
@@ -28,7 +38,7 @@ export class TracePresentation {
   private parents = new Map<string, TraceEntry>();
   readonly path: InvestigationStep[];
   constructor(readonly document: WorkspaceDocument, readonly mode: TraceViewMode) {
-    this.path = currentPath(document);
+    this.path = currentPath(document); const ahead = continuation(document);
     if (mode === 'branches') { return; }
     for (const goal of document.goals) {
       const goalEntry: TraceEntry = { kind: 'goal', id: goal.id };
@@ -36,7 +46,7 @@ export class TracePresentation {
       const selected = this.path.at(-1);
       const next = all.filter(step => step.parentStepId === selected?.id);
       const rows = goal.id === document.currentGoalId && selected
-        ? [...this.path, ...next]
+        ? [...this.path, ...ahead.run, ...ahead.choices] // the rest of the route is visible without selecting each step in turn
         : all.filter(step => !step.parentStepId);
       const entries: TraceEntry[] = [];
       // The selected block stays visible; expanding other blocks does not change stored data or selection.

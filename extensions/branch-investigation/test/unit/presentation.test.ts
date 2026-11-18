@@ -2,7 +2,8 @@ import { test } from 'node:test';
 import assert from 'node:assert/strict';
 import { clone, emptyDocument } from '../../src/domain/model';
 import { InvestigationService } from '../../src/domain/investigationService';
-import { codeLabel, currentPath, shortText, sourceLabel, TraceEntry, TracePresentation } from '../../src/ui/tracePresentation';
+import { pathMarks } from '../../src/ui/pathMarks';
+import { activeRoute, continuation, codeLabel, currentPath, shortText, sourceLabel, TraceEntry, TracePresentation } from '../../src/ui/tracePresentation';
 
 async function history(forks = false) {
   const s = new InvestigationService(emptyDocument(), { async save(d) { const next = clone(d); next.revision++; return next; } });
@@ -65,6 +66,26 @@ test('selecting an ancestor exposes its immediate alternatives without folding t
   assert.ok(children.every(step => visible.some(row => row.kind === 'step' && row.id === step.id)));
   assert.equal(currentPath(document).length, 20);
   assert.match(layout.message, /경로 20 \/ 전체 59단계/);
+});
+
+test('selecting an earlier step keeps the rest of the route visible up to the next fork', async () => {
+  const { s, main } = await history(true); await s.select(main[16]); // #17 -> #18 is the only way on; #18 forks
+  const document = s.document, layout = new TracePresentation(document, 'path'), fork = document.steps.filter(step => step.parentStepId === main[17]).map(step => step.id);
+  const visible = layout.getChildren(layout.getChildren()[0]).filter(row => row.kind === 'step').map(row => row.id);
+  assert.deepEqual(continuation(document).run.map(step => step.id), [main[17]]);
+  assert.deepEqual(visible.slice(-4), [main[16], main[17], ...fork]);
+  assert.deepEqual(activeRoute(document).map(step => step.id), main.slice(0, 18));
+  const plain = await history(); await plain.s.select(plain.main[4]);
+  assert.deepEqual(rows(new TracePresentation(plain.s.document, 'path')).ids, plain.main, 'a route without forks is listed to its end');
+});
+
+test('code marks: one per line for the active route, only where the saved text is still there', async () => {
+  const { s, main } = await history(true); await s.select(main[2]);
+  const d = s.document, text = (r: { start: { line: number } }) => r.start.line === 2 ? 'moved' : `Supply_${r.start.line}();`;
+  const marks = pathMarks(d, a => a.relativePath === 'module/a.c', text);
+  assert.deepEqual(marks.map(m => m.line), [1, 3, 4]); // #2's text moved; #4 forks, so the route stops there
+  assert.deepEqual(marks.find(m => m.current), { line: 3, label: '조사 #4', current: true }); // sequence counts the alternatives too
+  assert.deepEqual(pathMarks(d, () => false, text), []);
 });
 
 test('view groups keep stable IDs as a path grows; labels distinguish repeated reasons and Unicode stays whole', async () => {

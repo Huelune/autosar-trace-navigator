@@ -30,7 +30,9 @@ export class InvestigationTree implements vscode.TreeDataProvider<TreeEntry>, vs
     }
     const step = d.steps.find(step => step.id === entry.id)!, anchor = d.anchors.find(a => a.id === step.codeAnchorId);
     const current = step.id === d.currentStepId, parent = d.steps.find(s => s.id === step.parentStepId);
-    const children = d.steps.filter(s => s.parentStepId === step.id), after = d.currentStepId !== undefined && d.currentStepId === step.parentStepId;
+    const children = d.steps.filter(s => s.parentStepId === step.id);
+    // In the path view every row below the selected step is a way on, not only its direct children.
+    const after = this.mode === 'path' ? step.goalId === d.currentGoalId && this.presentation.path.length > 0 && !this.presentation.path.includes(step) : d.currentStepId !== undefined && d.currentStepId === step.parentStepId;
     const branch=this.mode==='branches'&&startsBranch(d.steps,step);
     const item = new vscode.TreeItem(`${branch||after ? '↳ ' : ''}${step.sequence}. ${codeLabel(step)}`, this.getChildren(entry).length?vscode.TreeItemCollapsibleState.Expanded:vscode.TreeItemCollapsibleState.None);
     item.id = step.id; item.contextValue = 'step';

@@ -40,6 +40,11 @@ export async function run():Promise<void>{
     await service.evidence(writer,{kind:'ct_observed',text:'사람이 가상 결과 확인',executionLabel:'CT-가상-01',observedAt:'2026-11-10T01:00:00.000Z',memo:'실제 CT 자동 실행 없음'});
     const count=[service.document.steps.length,service.document.relations.length];await command('navigateBack');await command('navigateForward');await command('openStep',writer);assert.deepEqual([service.document.steps.length,service.document.relations.length],count);
     assert.equal(resolutionState(),'verified');assert.equal(vscode.window.activeTextEditor!.document.uri.fsPath.toLowerCase(),path.join(root,'producer.c').toLowerCase());assert.equal(vscode.window.activeTextEditor!.document.getText(vscode.window.activeTextEditor!.selection),'Rte_Write_Struct_State(&built)');
+    {// The open file shows the investigation number of the current step at the end of its line; an unsaved edit that moves the code removes it.
+      const editor=vscode.window.activeTextEditor!,sequence=service.document.steps.find(s=>s.id===writer)!.sequence,mine=()=>app.pathMarksFor(editor).filter(m=>m.current);
+      assert.equal(mine().length,1);assert.ok(mine()[0].label.includes(`#${sequence}`));assert.equal(mine()[0].line,editor.selection.start.line);
+      await editor.edit(e=>e.insert(new vscode.Position(0,0),'\n'));assert.equal(mine().length,0);await vscode.commands.executeCommand('undo');assert.equal(mine().length,1);
+      console.log('PASS Host: code shows the current route number / shifted code shows none');}
     {// Search lists every step; typing is the quick pick's own filter. Picking one visits it and creates nothing.
       const counts=[service.document.steps.length,service.document.relations.length];let rows:{label:string;description?:string;detail?:string}[]=[];
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>{rows=items;return items.find(i=>i.description?.startsWith('보류'));}});await command('openStep',reader);await command('searchSteps');
