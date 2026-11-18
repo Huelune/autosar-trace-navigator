@@ -47,6 +47,15 @@ export async function run():Promise<void>{
       assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts);
       app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async()=>undefined});const visits=service.document.navigationEvents.length;await command('searchSteps');assert.equal(service.document.currentStepId,writer);assert.equal(service.document.navigationEvents.length,visits);}
     await command('toggleTraceView');assert.equal(app.tree!.viewMode,'branches');
+    {// Open items: read from the recorded status and next action. Picking one only visits it; cancelling changes nothing.
+      const counts=[service.document.steps.length,service.document.relations.length,service.document.revision];let rows:{label:string;description?:string;detail?:string}[]=[],title='';
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async(items,options)=>{rows=items;title=options.title??'';return undefined;}});await command('openStep',reader);const visits=service.document.navigationEvents.length;await command('openItems');
+      const held=rows.filter(r=>r.description?.startsWith('보류'));assert.equal(held.length,1);assert.ok(held[0].detail!.includes('다음 할 일: 초기화와 갱신 순서 확인'));assert.ok(title.includes(`미해결 ${rows.length}개`));
+      assert.ok(rows.some(r=>r.description?.startsWith('갈래 끝 (조사 중)')&&r.label.endsWith('다른 입력 반환값 조사')));assert.ok(!rows.some(r=>r.label.startsWith('▶')),'reader has children and no next action, so it is not listed');
+      assert.equal(service.document.currentStepId,reader);assert.equal(service.document.navigationEvents.length,visits);
+      app.setPromptsForTests({input:async()=>undefined,snippet:async()=>undefined,pick:async items=>items.find(i=>i.description?.startsWith('보류'))});await command('openItems');
+      assert.equal(service.document.currentStepId,writer);assert.equal(resolutionState(),'verified');assert.deepEqual([service.document.steps.length,service.document.relations.length],counts.slice(0,2));
+      console.log('PASS Host: open items list deferred and unfinished route ends / cancel changes nothing / pick only visits');}
     {// Two routes from one step: the fork lists the first step of each route, and each first step says how long its route is and where the work is.
       const item=(id:string)=>app.tree!.getTreeItem({kind:'step',id}),text=(id:string)=>`${item(id).label}|${item(id).description}`;
       assert.deepEqual(app.tree!.getChildren({kind:'step',id:reader}).map(e=>e.id),[writer,sibling.id]);assert.match(text(writer),/^↳ .*\|▶ 보류 · 갈래 1단계$/);assert.match(text(sibling.id),/^↳ .*\|조사 중 · 갈래 1단계$/);

@@ -86,3 +86,18 @@ test('exports of one goal: handover text with or without code, a self-contained 
   assert.throws(()=>exportGoal(d,'missing','handover',at));
   assert.equal(exportFileName('a/b: "c"? .. d','handover','2026-11-13'),'조사-a_b_c_d-2026-11-13.md');assert.equal(exportFileName(' / ','diagram','2026-11-13'),'조사-목표-2026-11-13.html');assert.equal(exportFileName('목표','mermaid','2026-11-13'),'조사-목표-2026-11-13-graph.md');
 });
+test('open items come from recorded status and next action only: deferred, next action, route ends; current goal first',async()=>{const {openItems}=await import('../../src/ui/stepSearch');
+  const {s,root}=await initial();const note={snippet:'x',contextBefore:'',contextAfter:''},edit=async(id:string,change:object)=>s.edit(id,{...s.document.steps.find(x=>x.id===id)!,...change});
+  const a=await s.add(note,'보류한 갈래');await edit(a,{status:'deferred',nextAction:'초기화\n순서 확인',requiredConditions:'앞 조건 거짓'});
+  await s.select(root);const b=await s.add(note,'할 일 있는 단계');await edit(b,{nextAction:'Writer 찾기'});const c=await s.add(note,'갈래 끝');
+  await s.select(root);const done=await s.add(note,'확인한 끝');await edit(done,{status:'confirmed',nextAction:'남은 메모'});await s.select(root);const out=await s.add(note,'제외한 끝');await edit(out,{status:'excluded'});
+  const first=s.document.currentGoalId!;await s.createGoal({title:'둘째 목표',description:''},capture());const other=await s.add(note,'둘째 목표의 끝');
+  let d=s.document,rows=openItems(d);
+  // root and b are under investigation with children: only b has a next action. The second goal is current, so its row leads.
+  assert.deepEqual(rows.map(r=>r.stepId),[other,a,b,c]);assert.equal(rows[0].label,'▶ 1. 둘째 목표의 끝');assert.equal(rows[0].description,'갈래 끝 (조사 중) · 둘째 목표');assert.equal(rows[0].detail,'다음 할 일을 적지 않았습니다.');
+  assert.equal(rows[1].description,'보류 · 정상 경로');assert.equal(rows[1].detail,'다음 할 일: 초기화 순서 확인 | 필요 조건: 앞 조건 거짓');assert.equal(rows[2].description,'다음 할 일 있음 · 정상 경로');assert.equal(rows[2].detail,'다음 할 일: Writer 찾기');assert.equal(rows[3].label,'4. 갈래 끝');
+  await s.switchGoal(first);d=s.document;assert.deepEqual(openItems(d).map(r=>r.stepId),[a,b,c,other]);
+  // Resolving a step removes it without any separate record.
+  await edit(a,{status:'confirmed'});await edit(b,{nextAction:' '});await edit(c,{status:'excluded'});assert.deepEqual(openItems(s.document).map(r=>r.stepId),[other]);
+  const {emptyDocument:empty}=await import('../../src/domain/model');assert.deepEqual(openItems(empty()),[]);
+});

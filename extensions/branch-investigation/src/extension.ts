@@ -13,7 +13,7 @@ import { AnchorCandidate, anchorCandidates, resolveAnchor, AnchorResolution } fr
 import { InvestigationTree, TreeEntry } from './ui/investigationTree';
 import { DetailsPanel } from './ui/detailsPanel';
 import { snippetInput } from './ui/snippetInput';
-import { stepSearchItems } from './ui/stepSearch';
+import { openItems, stepSearchItems } from './ui/stepSearch';
 import { AnalysisError, AnalysisLimits, EngineLocation, PythonTraceAnalysisPort, RelatedResult } from './adapters/traceAnalysisPort';
 
 export interface PromptPort { input(options:vscode.InputBoxOptions):Thenable<string|undefined>; snippet():Promise<string|undefined>; pick?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T|undefined>; pickMany?<T extends vscode.QuickPickItem>(items:T[],options:vscode.QuickPickOptions):Thenable<T[]|undefined>; save?(suggested:vscode.Uri):Thenable<vscode.Uri|undefined>; confirm?(message:string):Thenable<boolean>; analysisFailure?(message:string):Thenable<boolean>; }
@@ -203,6 +203,11 @@ export class InvestigationController {
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
     command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
       const options={title:'조사 단계 검색 — 이유·목표·상태·위치·조건·코드',placeHolder:'입력한 글자가 든 단계만 남습니다. 상태 이름(조사 중·확인·보류·제외)으로도 거를 수 있습니다.',matchOnDescription:true,matchOnDetail:true};
+      const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
+      if(picked){await this.display(picked.stepId,true,true);await this.view?.reveal({kind:'step',id:picked.stepId},{select:true,expand:true,focus:false});}});
+    // Open items are read from the recorded status and next action; picking one only visits it, like the search.
+    command('openItems',async()=>{const items=openItems(this.ready().document);if(!items.length){void vscode.window.showInformationMessage('미해결 항목이 없습니다. 보류한 단계, 다음 할 일을 적은 단계, 조사 중인 갈래 끝이 없습니다.');return;}
+      const options={title:`미해결 ${items.length}개 — 보류 · 다음 할 일 · 조사 중인 갈래 끝 (현재 목표 먼저)`,placeHolder:'돌아갈 단계를 고르세요. 상태나 다음 할 일을 고치면 목록에서 빠집니다.',matchOnDescription:true,matchOnDetail:true};
       const picked=await (this.prompts.pick?this.prompts.pick(items,options):vscode.window.showQuickPick(items,options));
       if(picked){await this.display(picked.stepId,true,true);await this.view?.reveal({kind:'step',id:picked.stepId},{select:true,expand:true,focus:false});}});
     command('openStep',async arg=>this.display(this.stepId(arg),true,true));
