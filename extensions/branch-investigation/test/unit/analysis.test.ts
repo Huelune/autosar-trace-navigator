@@ -41,6 +41,28 @@ test('cancel stops the process and reports cancelled, before or during the run',
   assert.equal(await code(fake('setTimeout(()=>{},60000)').related(request, before.signal)), 'cancelled');
 });
 
+test('configured exclusions and finite budgets are sent to the real process boundary', async () => {
+  const limits = { maxFiles: 650, maxSourceBytes: 64 * 1024 * 1024, maxFileBytes: 8 * 1024 * 1024 };
+  const echo = `let s='';process.stdin.on('data',d=>s+=d).on('end',()=>{const r=JSON.parse(s);process.stdout.write(JSON.stringify({ok:true,function:{name:JSON.stringify([r.excludePaths,r.limits])},variable:null,notes:[],candidates:[],truncated:false}))})`;
+  const result = await fake(echo).related({ ...request, excludePaths: ['noise'], limits }, idle);
+  assert.deepEqual(JSON.parse(result.functionName!), [['noise'], limits]);
+});
+
+test('limit failures show only validated metric and counts, including old-engine fallback', () => {
+  for (const metric of ['files', 'source_bytes', 'file_bytes'] as const) {
+    const detail = { metric, observedAtLeast: 602, limit: 500 };
+    assert.throws(() => parseRelated(JSON.stringify({ ok: false, error: 'analysis_limit', limitDetails: detail })),
+      (e: AnalysisError) => e.code === 'analysis_limit' && e.limitDetails?.metric === metric
+        && e.message.includes('602') && e.message.includes('500') && e.message.includes('부분 결과'));
+  }
+  for (const detail of [null, { metric: 'secret/path', observedAtLeast: 602, limit: 500 },
+    { metric: 'files', observedAtLeast: 500, limit: 500 }, { metric: 'files', observedAtLeast: '602', limit: 500 },
+    { metric: 'files', observedAtLeast: 602, limit: -1 }]) {
+    assert.throws(() => parseRelated(JSON.stringify({ ok: false, error: 'analysis_limit', limitDetails: detail })),
+      (e: AnalysisError) => e.code === 'invalid_response' && !e.message.includes('secret'));
+  }
+});
+
 test('a reply that could move the editor outside the workspace or to a guessed column is refused whole', () => {
   const ok = { ...empty, function: { name: 'F' }, candidates: [candidate] };
   assert.equal(parseRelated(JSON.stringify(ok)).candidates.length, 1);
@@ -86,4 +108,10 @@ test('function list request carries op and a reply is accepted only in the docum
   }
   assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'analysis_limit' })), (e: AnalysisError) => e.code === 'analysis_limit');
   assert.throws(() => parseFunctions(JSON.stringify({ ok: false, error: 'secret text' })), (e: AnalysisError) => e.code === 'internal' && !e.message.includes('secret'));
+});
+
+test('function search validates structured budget errors as strictly as related lookup', () => {
+  const detail = {metric:'files',observedAtLeast:602,limit:500};
+  assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:detail})),(e:AnalysisError)=>e.code==='analysis_limit'&&e.limitDetails?.metric==='files');
+  assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:{...detail,limit:-1}})),(e:AnalysisError)=>e.code==='invalid_response');
 });

@@ -6,11 +6,14 @@ const relations = ['value', 'execution_condition', 'call', 'rte_data'] as const;
 /** requiredTruth is set only for an execution condition: the truth value needed to reach the cursor, not a proof that it can hold. */
 export interface AnalysisCandidate { relation: typeof relations[number]; label: string; functionName: string | null; uncertainty: string[]; requiredTruth: boolean | null; evidence: EngineLocation; target: EngineLocation | null }
 /** line and character are the editor's zero-based line and UTF-16 column of the cursor. */
-export interface RelatedRequest { root: string; file: string; line: number; character: number; includePaths: string[] }
+export interface AnalysisLimits { maxFiles: number; maxSourceBytes: number; maxFileBytes: number }
+export interface LimitDetails { metric: 'files'|'source_bytes'|'file_bytes'; observedAtLeast: number; limit: number }
+interface ScopeOptions { excludePaths?: string[]; limits?: AnalysisLimits }
+export interface RelatedRequest extends ScopeOptions { root: string; file: string; line: number; character: number; includePaths: string[] }
 /** variable is the access path under the cursor when the engine can trace it; notes are reason codes for what it could not do. */
 export interface RelatedResult { functionName: string | null; variable: string | null; notes: string[]; candidates: AnalysisCandidate[]; truncated: boolean }
 /** Every function definition of the analysis scope. signature is the declaration up to the body. */
-export interface FunctionsRequest { op: 'functions'; root: string; includePaths: string[] }
+export interface FunctionsRequest extends ScopeOptions { op: 'functions'; root: string; includePaths: string[] }
 export interface FunctionEntry { name: string; signature: EngineLocation }
 export interface FunctionsResult { functions: FunctionEntry[]; truncated: boolean }
 export interface TraceAnalysisPort { related(request: RelatedRequest, signal: AbortSignal): Promise<RelatedResult>; functions(request: FunctionsRequest, signal: AbortSignal): Promise<FunctionsResult> }
@@ -30,7 +33,23 @@ const messages = {
 } as const;
 export type AnalysisErrorCode = keyof typeof messages;
 export class AnalysisError extends Error {
-  constructor(readonly code: AnalysisErrorCode) { super(messages[code]); }
+  constructor(readonly code: AnalysisErrorCode, readonly limitDetails?: LimitDetails) {
+    super(code === 'analysis_limit' && limitDetails ? limitMessage(limitDetails) : messages[code]);
+  }
+}
+
+function limitMessage(d: LimitDetails): string {
+  const label = { files: 'C/H 파일 수', source_bytes: '소스 합계', file_bytes: '단일 파일 크기' }[d.metric];
+  const unit = d.metric === 'files' ? '개' : '바이트';
+  return `${label} 한도 초과: 최소 ${d.observedAtLeast.toLocaleString('ko-KR')}${unit}, 한도 ${d.limit.toLocaleString('ko-KR')}${unit}. 분석 범위·제외 경로를 조정하거나 PC 여건에 맞게 분석 한도를 설정하세요. 부분 결과는 반환하지 않았습니다.`;
+}
+
+function limitDetails(v: unknown): LimitDetails | undefined {
+  if (v === undefined) { return undefined; } // Older installed engines report only a code.
+  const d = v as LimitDetails;
+  if (!['files', 'source_bytes', 'file_bytes'].includes(d?.metric) || !Number.isSafeInteger(d.observedAtLeast)
+    || !Number.isSafeInteger(d.limit) || d.limit < 1 || d.observedAtLeast <= d.limit) { throw new AnalysisError('invalid_response'); }
+  return { metric: d.metric, observedAtLeast: d.observedAtLeast, limit: d.limit };
 }
 
 const count = (v: unknown): v is number => Number.isSafeInteger(v) && (v as number) >= 0;
@@ -46,9 +65,12 @@ function location(v: unknown): EngineLocation {
 }
 /** Accept only the documented shape; anything else is one error, never a partial result. */
 export function parseRelated(raw: string): RelatedResult {
-  let r: { ok?: unknown; error?: unknown; function?: { name?: unknown } | null; variable?: unknown; notes?: unknown; candidates?: unknown; truncated?: unknown };
+  let r: { ok?: unknown; error?: unknown; limitDetails?: unknown; function?: { name?: unknown } | null; variable?: unknown; notes?: unknown; candidates?: unknown; truncated?: unknown };
   try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
-  if (r?.ok === false) { throw new AnalysisError(typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal'); }
+  if (r?.ok === false) {
+    const code = typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal';
+    throw new AnalysisError(code, code === 'analysis_limit' ? limitDetails(r.limitDetails) : undefined);
+  }
   const name = r?.function === null ? null : r?.function?.name;
   const notes = r?.notes, variable = r?.variable;
   if (r?.ok !== true || !(name === null || text(name, 1000)) || !(variable === null || text(variable, 1000)) || !Array.isArray(notes) || notes.length > 20 || !notes.every(n => text(n, 200))
@@ -64,9 +86,12 @@ export function parseRelated(raw: string): RelatedResult {
 }
 
 export function parseFunctions(raw: string): FunctionsResult {
-  let r: { ok?: unknown; error?: unknown; functions?: unknown; truncated?: unknown };
+  let r: { ok?: unknown; error?: unknown; limitDetails?: unknown; functions?: unknown; truncated?: unknown };
   try { r = JSON.parse(raw); } catch { throw new AnalysisError('invalid_response'); }
-  if (r?.ok === false) { throw new AnalysisError(typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal'); }
+  if (r?.ok === false) {
+    const code = typeof r.error === 'string' && Object.hasOwn(messages, r.error) ? r.error as AnalysisErrorCode : 'internal';
+    throw new AnalysisError(code, code === 'analysis_limit' ? limitDetails(r.limitDetails) : undefined);
+  }
   if (r?.ok !== true || !Array.isArray(r.functions) || r.functions.length > 5000 || typeof r.truncated !== 'boolean') { throw new AnalysisError('invalid_response'); }
   return { truncated: r.truncated, functions: r.functions.map((f: FunctionEntry) => { if (!text(f?.name, 1000) || !f.name) { throw new AnalysisError('invalid_response'); } return { name: f.name, signature: location(f.signature) }; }) };
 }
