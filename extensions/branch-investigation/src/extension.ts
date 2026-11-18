@@ -7,6 +7,7 @@ import { InvestigationService, GoalInput, StepLink } from './domain/investigatio
 import { BULK_LIMIT, bulkKindLabel, splitBulk } from './domain/bulkPaste';
 import { ExportFormat, exportFileName, exportFormats, exportGoal } from './ui/exporter';
 import { scopeRows } from './ui/scopeRows';
+import { PathMark, pathMarks } from './ui/pathMarks';
 import { requireValue, validId } from './domain/validation';
 import { JsonStore } from './storage/jsonStore';
 import { sourcePath } from './storage/paths';
@@ -28,14 +29,30 @@ export class InvestigationController {
   readonly status=vscode.window.createStatusBarItem(vscode.StatusBarAlignment.Left,20);
   readonly details:DetailsPanel; lastResolution?:AnchorResolution; private root?:string; private prompts=defaultPrompts; private operations:Promise<unknown>=Promise.resolve();
   private decoration=vscode.window.createTextEditorDecorationType({backgroundColor:new vscode.ThemeColor('editor.findMatchHighlightBackground'),border:'1px solid',borderColor:new vscode.ThemeColor('editor.findMatchBorder')});
+  // Line-end text, not CodeLens: a lens inserts a line and pushes the code down.
+  private pathMark=vscode.window.createTextEditorDecorationType({after:{margin:'0 0 0 2em',color:new vscode.ThemeColor('editorCodeLens.foreground')}});
+  private currentMark=vscode.window.createTextEditorDecorationType({after:{margin:'0 0 0 2em',color:new vscode.ThemeColor('editorWarning.foreground'),fontWeight:'bold'}});
+  /** Investigation numbers of the active route for one editor. Empty when the setting is off or nothing matches. */
+  pathMarksFor(editor:vscode.TextEditor):PathMark[]{
+    if(!this.service||!vscode.workspace.getConfiguration('branchInvestigation').get<boolean>('showPathNumbersInCode',true)||editor.document.uri.scheme!=='file'){return [];}
+    // shortcut: files are matched by path ignoring case and the saved text is compared as is, so a symlinked path or changed line endings show no number; resolve through resolveAnchor if that matters.
+    const file=editor.document.uri.fsPath.toLowerCase(),d=editor.document;
+    return pathMarks(this.service.document,a=>!!a.fileUri&&vscode.Uri.parse(a.fileUri).fsPath.toLowerCase()===file,r=>d.getText(new vscode.Range(r.start.line,r.start.character,r.end.line,r.end.character)));
+  }
+  private markEditors():void{
+    for(const editor of vscode.window.visibleTextEditors){
+      const marks=this.pathMarksFor(editor).filter(m=>m.line<editor.document.lineCount),at=(current:boolean)=>marks.filter(m=>m.current===current).map(m=>({range:editor.document.lineAt(m.line).range,renderOptions:{after:{contentText:(m.current?'▶ ':'◆ ')+m.label}}}));
+      editor.setDecorations(this.pathMark,at(false));editor.setDecorations(this.currentMark,at(true));
+    }
+  }
   constructor(private readonly context:vscode.ExtensionContext){
     this.details=new DetailsPanel(async action=>{const service=this.ready();if(action.type==='save'){await service.edit(action.stepId,action.edit);}else{await service.evidence(action.stepId,action.evidence);}await this.display(action.stepId,false);},e=>void this.failed(e));
-    this.status.command='branchInvestigation.retrySave';this.status.show();context.subscriptions.push(this.status,this.details,this.decoration);
+    this.status.command='branchInvestigation.retrySave';this.status.show();context.subscriptions.push(this.status,this.details,this.decoration,this.pathMark,this.currentMark);
   }
   setPromptsForTests(prompts:PromptPort):void{requireValue(this.context.extensionMode===vscode.ExtensionMode.Test,'입력 포트 교체는 Host 테스트에서만 허용합니다.');this.prompts=prompts;}
   private trusted():void{requireValue(vscode.workspace.isTrusted,'신뢰하지 않은 작업 공간에서는 조사 기록을 만들거나 파일을 열지 않습니다.');requireValue(vscode.workspace.workspaceFolders?.length===1&&vscode.workspace.workspaceFolders[0].uri.scheme==='file','단일 로컬 작업 폴더만 지원합니다. 다중 루트·원격 문서는 수동 붙여넣기로만 준비하세요.');}
   ready():InvestigationService{this.trusted();requireValue(this.service,'조사 저장소를 열지 못했습니다. 잠금 또는 백업 복구 명령을 확인하세요.');return this.service;}
-  private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service,this.context.workspaceState.get('traceViewMode')==='branches'?'branches':'path');this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();};this.updateStatus();}
+  private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service,this.context.workspaceState.get('traceViewMode')==='branches'?'branches':'path');this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();this.markEditors();};this.updateStatus();this.markEditors();}
   private updateStatus():void{this.status.text=this.service?.dirty?(this.service.error?'$(warning) 분기 조사: 저장 실패 · 재시도':'$(sync~spin) 분기 조사: 저장 중'):this.service?'$(list-tree) 분기 조사: 자동 저장':'$(warning) 분기 조사: 저장소 확인 필요';this.status.tooltip=this.service?.error??'조사 순번은 실제 실행 순서가 아닙니다.';if(this.view&&this.tree){this.view.title=this.tree.viewMode==='path'?'현재 경로':'전체 갈래';this.view.message=this.tree.message.replaceAll('\n','\u2028');}}
   async initialize():Promise<void>{this.trusted();this.root=vscode.workspace.workspaceFolders![0].uri.fsPath;this.store??=new JsonStore(this.root);const document=await this.store.open();this.attach(new InvestigationService(document,this.store));if(document.currentStepId){await this.display(document.currentStepId,false);}}
   async failed(error:unknown):Promise<void>{
@@ -209,6 +226,7 @@ export class InvestigationController {
     command('focusCurrentStep',async()=>{const id=this.ready().document.currentStepId;requireValue(id,'현재 조사단계가 없습니다.');await vscode.commands.executeCommand('branchInvestigation.tree.focus');await this.view?.reveal({kind:'step',id},{select:true,focus:true,expand:true});});
     command('toggleTraceView',async()=>{this.ready();const mode=this.tree!.viewMode==='path'?'branches':'path';await this.context.workspaceState.update('traceViewMode',mode);this.tree!.setMode(mode);this.updateStatus();const id=this.ready().document.currentStepId;if(id&&this.view?.visible){await this.view.reveal({kind:'step',id},{select:true,focus:false});}});command('searchFunctions',async()=>this.searchFunctions());command('checkScope',async()=>this.checkScope());
     const sources=vscode.workspace.createFileSystemWatcher('**/*.{c,h,C,H}'),stale=()=>this.analysisCache.clear();sources.onDidChange(stale);sources.onDidCreate(stale);sources.onDidDelete(stale);this.context.subscriptions.push(sources);
+    const remark=()=>this.markEditors();this.context.subscriptions.push(vscode.window.onDidChangeVisibleTextEditors(remark),vscode.workspace.onDidChangeTextDocument(remark),vscode.workspace.onDidChangeConfiguration(e=>{if(e.affectsConfiguration('branchInvestigation.showPathNumbersInCode')){remark();}}));
     // Finding a step is navigation only: it visits the picked step like a click in the tree and records nothing else.
     command('searchSteps',async()=>{const items=stepSearchItems(this.ready().document);requireValue(items.length,'검색할 조사 단계가 없습니다.');
       const options={title:'조사 단계 검색 — 이유·목표·상태·위치·조건·코드',placeHolder:'입력한 글자가 든 단계만 남습니다. 상태 이름(조사 중·확인·보류·제외)으로도 거를 수 있습니다.',matchOnDescription:true,matchOnDetail:true};

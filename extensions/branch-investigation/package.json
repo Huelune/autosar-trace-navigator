@@ -344,6 +344,12 @@
     "configuration": {
       "title": "Branch Investigation",
       "properties": {
+        "branchInvestigation.showPathNumbersInCode": {
+          "type": "boolean",
+          "default": true,
+          "scope": "window",
+          "markdownDescription": "편집기의 줄 끝에 현재 경로의 조사 번호를 표시합니다. 저장한 코드와 지금 텍스트가 같은 단계만 표시하며, 번호는 조사 순서이지 실행 순서가 아닙니다."
+        },
         "branchInvestigation.pythonPath": {
           "type": "string",
           "default": "",
