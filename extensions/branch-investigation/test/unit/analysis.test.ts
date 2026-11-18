@@ -115,3 +115,20 @@ test('function search validates structured budget errors as strictly as related 
   assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:detail})),(e:AnalysisError)=>e.code==='analysis_limit'&&e.limitDetails?.metric==='files');
   assert.throws(()=>parseFunctions(JSON.stringify({ok:false,error:'analysis_limit',limitDetails:{...detail,limit:-1}})),(e:AnalysisError)=>e.code==='invalid_response');
 });
+
+test('scope check reply is accepted only in the documented shape and its rows show budgets before folders', async () => {
+  const { parseScope } = await import('../../src/adapters/traceAnalysisPort'); const { scopeRows } = await import('../../src/ui/scopeRows');
+  const ok = { ok: true, files: 602, sourceBytes: 3 * 1048576, largestFileBytes: 5 * 1048576, filesOverFileLimit: 1, limits: { maxFiles: 500, maxSourceBytes: 32 * 1048576, maxFileBytes: 4 * 1048576 }, over: ['files', 'file_bytes'], folders: [{ path: 'noise', files: 600, bytes: 2 * 1048576 }, { path: '.', files: 2, bytes: 1048576 }], foldersTruncated: true };
+  const parsed = parseScope(JSON.stringify(ok)); assert.deepEqual({ ok: true, ...parsed }, ok);
+  for (const bad of [{ ...ok, files: -1 }, { ...ok, over: ['time'] }, { ...ok, limits: { maxFiles: 1 } }, { ...ok, foldersTruncated: 0 }, { ...ok, folders: [{ path: '../secret', files: 1, bytes: 1 }] },
+    { ...ok, folders: [{ path: 'C:/secret', files: 1, bytes: 1 }] }, { ...ok, folders: Array.from({ length: 21 }, () => ok.folders[0]) }, { ok: true }]) {
+    assert.throws(() => parseScope(JSON.stringify(bad)), (e: AnalysisError) => e.code === 'invalid_response');
+  }
+  assert.throws(() => parseScope(JSON.stringify({ ok: false, error: 'scope_not_readable' })), (e: AnalysisError) => e.code === 'scope_not_readable');
+  const rows = scopeRows(parsed, ['build']);
+  assert.deepEqual(rows.slice(0, 3), [{ label: '$(error) C/H 파일 수: 602개 / 한도 500개', description: '한도 초과' }, { label: '$(check) 소스 합계: 3.0 MiB / 한도 32.0 MiB', description: '한도 안' },
+    { label: '$(error) 가장 큰 파일: 5.0 MiB / 한도 4.0 MiB (한도를 넘는 파일 1개)', description: '한도 초과' }]);
+  assert.deepEqual(rows.slice(3, 5), [{ label: '$(folder) noise', description: '파일 600개 · 2.0 MiB · 파일 수의 100%' }, { label: '$(folder) (작업 폴더 바로 아래)', description: '파일 2개 · 1.0 MiB · 파일 수의 0%' }]);
+  assert.ok(rows[5].label.includes('상위 20개')); assert.ok(rows[6].label.includes('1개 적용됨')); assert.equal(rows.at(-1)!.settings, true);
+  assert.equal(scopeRows({ ...parsed, files: 0, folders: [], foldersTruncated: false, over: [] }, []).length, 5);
+});

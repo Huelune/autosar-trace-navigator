@@ -118,6 +118,12 @@
         "icon": "$(arrow-right)"
       },
       {
+        "command": "branchInvestigation.checkScope",
+        "title": "분석 범위 점검 (파일 수·크기·한도)",
+        "category": "분기 조사",
+        "icon": "$(dashboard)"
+      },
+      {
         "command": "branchInvestigation.openItems",
         "title": "미해결 조사 목록 (보류·다음 할 일·갈래 끝)",
         "category": "분기 조사",
@@ -245,6 +251,11 @@
         },
         {
           "command": "branchInvestigation.searchFunctions",
+          "when": "view == branchInvestigation.tree",
+          "group": "2_find"
+        },
+        {
+          "command": "branchInvestigation.checkScope",
           "when": "view == branchInvestigation.tree",
           "group": "2_find"
         },
