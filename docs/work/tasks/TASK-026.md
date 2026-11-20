@@ -1,6 +1,6 @@
 # TASK-026 — 작성 잠금 파일 제거 (저장소가 안 열리는 문제)
 
-- 상태: done (Host 재실행 대기)
+- 상태: done
 - 담당: claude-win (Claude Code)
 - 브랜치: feat/TASK-026-no-writer-lock
 - 기준 커밋: baafae772921786c7398fa5fbee0d13f984148b6
@@ -24,12 +24,12 @@
 - [x] 열 때 잠금 파일을 만들지 않고, 남아 있는 잠금 파일이 열기·저장을 막지 않는다.
 - [x] 두 창이 열어도 먼저 저장된 내용을 나중 창이 덮어쓰지 않는다(revision·해시 검사).
 - [x] 잠금 복구 명령 제거, README·CHANGELOG·STATUS 갱신, VSIX 재빌드.
-- [ ] 설치된 VS Code의 Host 테스트(record·restart·Restricted Mode)와 VSIX 별도 설치 확인 — VS Code 업데이트 대기로 미실행.
+- [x] 설치된 VS Code의 Host 테스트(record·restart·Restricted Mode)와 VSIX 별도 설치 확인.
 
 ## 진행과 검증
 
-확장 단위 46개 통과. Host는 설치된 VS Code가 업데이트 적용을 기다리며 실행을 거부해 돌리지 못했다. 상세는 세션 기록.
+확장 단위 46개, Host의 record·restart·Restricted Mode, VSIX 감사와 별도 설치 확인 통과. 처음엔 VS Code 업데이트 대기로 Host가 거부됐고, 사용자가 업데이트한 뒤 다시 돌렸다. 상세는 세션 기록.
 
 ## 인수인계 — 다음 첫 행동
 
-VS Code 창을 모두 닫아 업데이트를 적용한 뒤 확장 폴더에서 `npm run test:host`를 돌린다. 통과하면 사용자 요청 시 PR을 만든다.
+사용자 요청 시 PR을 만든다. 실제 사용에서 비정상 종료 뒤 다시 열리는지, 두 창 충돌 안내가 이해되는지 사람이 확인한다.
