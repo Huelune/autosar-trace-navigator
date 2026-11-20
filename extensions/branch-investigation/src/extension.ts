@@ -52,7 +52,7 @@ export class InvestigationController {
   }
   setPromptsForTests(prompts:PromptPort):void{requireValue(this.context.extensionMode===vscode.ExtensionMode.Test,'입력 포트 교체는 Host 테스트에서만 허용합니다.');this.prompts=prompts;}
   private trusted():void{requireValue(vscode.workspace.isTrusted,'신뢰하지 않은 작업 공간에서는 조사 기록을 만들거나 파일을 열지 않습니다.');requireValue(vscode.workspace.workspaceFolders?.length===1&&vscode.workspace.workspaceFolders[0].uri.scheme==='file','단일 로컬 작업 폴더만 지원합니다. 다중 루트·원격 문서는 수동 붙여넣기로만 준비하세요.');}
-  ready():InvestigationService{this.trusted();requireValue(this.service,'조사 저장소를 열지 못했습니다. 잠금 또는 백업 복구 명령을 확인하세요.');return this.service;}
+  ready():InvestigationService{this.trusted();requireValue(this.service,'조사 저장소를 열지 못했습니다. 파일이 손상됐다면 백업 복구 명령을 실행하세요.');return this.service;}
   private attach(service:InvestigationService):void{this.service=service;this.tree=new InvestigationTree(service,this.context.workspaceState.get('traceViewMode')==='branches'?'branches':'path',this.memoRows());this.view=vscode.window.createTreeView('branchInvestigation.tree',{treeDataProvider:this.tree,showCollapseAll:true});this.context.subscriptions.push(this.tree,this.view);service.onChange=()=>{this.tree?.refresh();this.updateStatus();this.markEditors();};this.updateStatus();this.markEditors();}
   private updateStatus():void{this.status.text=this.service?.dirty?(this.service.error?'$(warning) 분기 조사: 저장 실패 · 재시도':'$(sync~spin) 분기 조사: 저장 중'):this.service?'$(list-tree) 분기 조사: 자동 저장':'$(warning) 분기 조사: 저장소 확인 필요';this.status.tooltip=this.service?.error??'조사 순번은 실제 실행 순서가 아닙니다.';if(this.view&&this.tree){this.view.title=this.tree.viewMode==='path'?'현재 경로':'전체 갈래';this.view.message=this.tree.message.replaceAll('\n','\u2028');}}
   async initialize():Promise<void>{this.trusted();this.root=vscode.workspace.workspaceFolders![0].uri.fsPath;this.store??=new JsonStore(this.root);const document=await this.store.open();this.attach(new InvestigationService(document,this.store));if(document.currentStepId){await this.display(document.currentStepId,false);}}
@@ -260,7 +260,6 @@ export class InvestigationController {
       if(await confirm(`목표 "${goal.title}"과 단계 ${d.steps.filter(s=>s.goalId===goal.id).length}개를 지울까요?`)){await this.ready().removeGoal(goal.id);await afterDelete();}});
     command('retrySave',async()=>{await this.ready().retrySave();const current=this.ready().document.currentStepId;if(current){await this.display(current,false);}});
     command('recoverBackup',async()=>{requireValue(this.store,'저장 폴더가 없습니다.');if(await vscode.window.showWarningMessage('현재 파일은 보존하고 마지막 정상 백업을 복구할까요?',{modal:true},'백업 복구')==='백업 복구'){const d=await this.store.recoverBackup();this.view?.dispose();this.tree?.dispose();this.attach(new InvestigationService(d,this.store));if(d.currentStepId){await this.display(d.currentStepId,false);}}});
-    command('recoverLock',async()=>{requireValue(this.store,'저장 폴더가 없습니다.');if(await vscode.window.showWarningMessage('소유 프로세스의 종료를 확인한 잠금만 복구합니다. 진행할까요?',{modal:true},'종료 확인 후 복구')==='종료 확인 후 복구'){await this.store.recoverStaleLock();await this.initialize();}});
   }
   async close():Promise<void>{await this.service?.whenIdle();await this.store?.close();}
 }
