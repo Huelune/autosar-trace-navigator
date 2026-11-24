@@ -175,11 +175,6 @@
         "category": "분기 조사"
       },
       {
-        "command": "branchInvestigation.recoverLock",
-        "title": "종료된 작성자의 잠금 복구",
-        "category": "분기 조사"
-      },
-      {
         "command": "branchInvestigation.focusCurrentStep",
         "title": "분기 조사: 현재 단계 찾기",
         "icon": "$(target)"
